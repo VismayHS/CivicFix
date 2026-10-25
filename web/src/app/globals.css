@@ -1,0 +1,218 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+  CivicFix design tokens
+  World: municipal service desk / civic signage.
+  Paper ground, municipal navy shell, signal amber reserved for SLA risk,
+  green for resolved, red for breached. See docs/design/DESIGN.md.
+*/
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-public-sans);
+  --font-heading: var(--font-newsreader);
+  --font-serif: var(--font-newsreader);
+  --font-mono: var(--font-plex-mono);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+
+  /* State colours: only where they carry meaning */
+  --color-signal: var(--signal);
+  --color-signal-soft: var(--signal-soft);
+  --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-dup: var(--dup);
+  --color-dup-soft: var(--dup-soft);
+  --color-paper: var(--paper);
+  --color-rail: var(--rail);
+  --color-rail-foreground: var(--rail-foreground);
+  --color-rail-muted: var(--rail-muted);
+
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+}
+
+:root {
+  --paper: #f6f4ef;
+  --background: #f6f4ef;
+  --foreground: #17202c;
+  --card: #ffffff;
+  --card-foreground: #17202c;
+  --popover: #ffffff;
+  --popover-foreground: #17202c;
+  --primary: #17324d;
+  --primary-foreground: #f8f6f1;
+  --secondary: #ebe7dd;
+  --secondary-foreground: #17202c;
+  --muted: #eeebe4;
+  --muted-foreground: #586170;
+  --accent: #e8e3d7;
+  --accent-foreground: #17202c;
+  --destructive: #b3261e;
+  --border: #dcd6ca;
+  --input: #cfc8b9;
+  --ring: #2f5d8a;
+
+  --signal: #9a5a00;
+  --signal-soft: #fbefd9;
+  --ok: #24693f;
+  --ok-soft: #e3f0e6;
+  --danger: #a8231c;
+  --danger-soft: #fbe5e2;
+  --info: #24578a;
+  --info-soft: #e2ecf6;
+  --dup: #5f4596;
+  --dup-soft: #ece6f6;
+
+  --rail: #14283c;
+  --rail-foreground: #f1eee7;
+  --rail-muted: #a9b4c2;
+
+  --chart-1: #17324d;
+  --chart-2: #c27a12;
+  --chart-3: #2e7d4f;
+  --chart-4: #8a93a3;
+  --chart-5: #b3261e;
+  --radius: 0.5rem;
+
+  --sidebar: #14283c;
+  --sidebar-foreground: #f1eee7;
+  --sidebar-primary: #f1eee7;
+  --sidebar-primary-foreground: #14283c;
+  --sidebar-accent: #1d3650;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: #24405c;
+  --sidebar-ring: #7fa6cc;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    @apply font-sans;
+    -webkit-tap-highlight-color: transparent;
+    scrollbar-color: #b9b2a3 transparent;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "ss01", "cv11";
+    text-rendering: optimizeLegibility;
+  }
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+  ::selection {
+    background: #f3d9a4;
+    color: #17202c;
+  }
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+  a {
+    text-underline-offset: 3px;
+    text-decoration-thickness: 1px;
+  }
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+  p {
+    text-wrap: pretty;
+  }
+  table {
+    font-variant-numeric: tabular-nums;
+  }
+  input::placeholder,
+  textarea::placeholder {
+    color: #6b7280;
+  }
+}
+
+@layer utilities {
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+  .font-display {
+    font-family: var(--font-newsreader), Georgia, serif;
+    letter-spacing: -0.02em;
+  }
+  .paper-grain {
+    background-image: radial-gradient(rgba(23, 32, 44, 0.035) 1px, transparent 1px);
+    background-size: 3px 3px;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .reveal {
+    animation: reveal 600ms var(--ease-out) both;
+    animation-delay: calc(var(--i, 0) * 70ms);
+  }
+}
+
+@keyframes reveal {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Leaflet: keep map chrome in the palette */
+.leaflet-container {
+  font-family: var(--font-public-sans), system-ui, sans-serif;
+  background: #e9e5dc;
+}
+.leaflet-control-attribution {
+  font-size: 10px;
+}
