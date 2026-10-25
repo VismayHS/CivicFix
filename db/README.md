@@ -1,6 +1,6 @@
 # Database (`db/`)
 
-**Owner: Ashvin Ronald Lobo.** PostgreSQL 17 (relational) + Qdrant (vector), both run locally with Docker.
+**Owners:** Ashvin (functions, procedures, triggers, cron, tests) and Vismay (views, RBAC/RLS, queries, Qdrant). Specs: [docs/backend/](../docs/backend/README.md). PostgreSQL 17 (relational) + Qdrant (vector), both run locally with Docker.
 
 ## Quick start
 
@@ -62,6 +62,8 @@ Seed timestamps are written as `now() - interval 'N seconds'`, so complaints are
 - Keep `web/src/lib/types.ts` and `docs/database/schema-v2.md` in sync in the same PR.
 
 ## What each upcoming object must do
+
+Full specification with signatures, traps and acceptance checks: [docs/backend/migrations-spec.md](../docs/backend/migrations-spec.md). Summary:
 
 The mock data source (`web/src/lib/data/mock/index.ts`) already implements this behaviour in TypeScript. Use it as the executable spec; comments there name the SQL object each block stands in for.
 
