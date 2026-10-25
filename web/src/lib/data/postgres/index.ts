@@ -3,7 +3,7 @@ import { DataError, type DataSource } from "../contract";
 
 /**
  * PostgreSQL + Qdrant implementation of the DataSource contract.
- * OWNER: Ashvin (backend). See ./README.md for the build order.
+ * Owners and build order: see ./README.md.
  *
  * Until a method is implemented it throws, so switching DATA_SOURCE=postgres
  * fails loudly on the exact page that still needs backend work.
