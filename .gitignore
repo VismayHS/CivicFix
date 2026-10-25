@@ -1,0 +1,15 @@
+# secrets
+.env
+.env.*
+!.env.example
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json
+.idea/
+
+# agent tooling caches (commit PRODUCT.md / DESIGN.md, not caches)
+.claude/settings.local.json
+.impeccable/cache/
