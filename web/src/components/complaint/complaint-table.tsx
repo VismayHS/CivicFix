@@ -41,7 +41,7 @@ export function ComplaintTable({ complaints, hrefFor, columns = ["category", "wa
         ))}
       </ul>
       <div className={cn("hidden overflow-x-auto rounded-lg border bg-card md:block", className)}>
-        <table className="w-full min-w-[720px] text-sm">
+        <table className="w-full min-w-180 text-sm">
           <thead>
             <tr className="border-b bg-muted/60 text-left text-xs font-medium text-muted-foreground">
               <th scope="col" className="px-4 py-2.5 font-medium">Complaint</th>
@@ -57,7 +57,7 @@ export function ComplaintTable({ complaints, hrefFor, columns = ["category", "wa
           <tbody>
             {complaints.map((c) => (
               <tr key={c.complaintId} className="group relative border-b last:border-0 hover:bg-accent/40 focus-within:bg-accent/40">
-                <td className="max-w-[22rem] px-4 py-3">
+                <td className="max-w-88 px-4 py-3">
                   <Link href={hrefFor(c)} className="after:absolute after:inset-0 focus-visible:outline-none">
                     <span className="flex items-center gap-2">
                       <ComplaintRef id={c.complaintId} />
