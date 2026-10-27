@@ -52,17 +52,17 @@ The mock implementation ([`lib/data/mock/index.ts`](../web/src/lib/data/mock/ind
 
 ## REST endpoints (`/api/v1`)
 
-Server Actions cover the UI. For the "Backend/API" rubric item, expose the same operations as JSON Route Handlers that call `data`. [`/api/v1/health`](../web/src/app/api/v1/health/route.ts) is the template.
+Server Actions cover the UI. These JSON Route Handlers call the same `data` adapter and use the same session cookie and role checks.
 
 | Method | Path | Calls |
 |---|---|---|
-| GET | `/api/v1/health` | `listWards` (done) |
+| GET | `/api/v1/health` | `listWards` |
 | POST | `/api/v1/auth/login` · `/auth/register` · `/auth/logout` | auth methods |
-| GET | `/api/v1/complaints?status&ward&category&q` | `listComplaints` |
+| GET | `/api/v1/complaints?status&ward&category&q` | `listComplaints` (authenticated) |
 | POST | `/api/v1/complaints` | `createComplaint` |
 | GET | `/api/v1/complaints/:id` | `getComplaint` |
 | POST | `/api/v1/complaints/:id/status` | `changeStatus` |
-| POST/DELETE | `/api/v1/complaints/:id/upvote` | `toggleUpvote` |
+| POST | `/api/v1/complaints/:id/upvote` | `toggleUpvote` |
 | POST | `/api/v1/duplicates/check` | `findDuplicateCandidates` |
 | POST | `/api/v1/duplicates/:cid/:mid/review` | `reviewDuplicate` |
 | POST | `/api/v1/escalations/sweep` | `runSlaSweep` |

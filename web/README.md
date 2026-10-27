@@ -43,3 +43,15 @@ src/
 - With Cache Components on, anything that reads cookies, params, search params or data must sit inside `<Suspense>`; the pattern is a small async `Body` component per page.
 - After a mutation, Server Actions call `refresh()` so the current page re-renders with fresh data.
 - Read `node_modules/next/dist/docs/` before using a Next.js API you haven't used in v16 (see `AGENTS.md`).
+
+## Run with the local backend
+
+From the repository root, copy `.env.example` to `.env`, start services with
+`docker compose up -d --build`, apply any pending migrations with
+`docker compose exec db bash /civicfix/migrate.sh`, then download the local embedding model with
+`docker compose exec ollama ollama pull nomic-embed-text`. In this directory,
+copy `.env.example` to `.env.local`, install packages, and run `npm run dev`.
+Set `DATABASE_URL` to match the root `POSTGRES_PASSWORD` if you changed its
+local default. Docker applies database migrations and demo seed on the first
+volume initialization; run `docker compose exec db bash /civicfix/migrate.sh`
+after adding later migrations.
