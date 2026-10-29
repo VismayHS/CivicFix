@@ -14,7 +14,10 @@ npm run db:queries   # regenerate ../db/queries/NN-*.sql from the DB Lab catalog
 npm run vector:setup       # create the Qdrant collection + payload indexes
 npm run vector:reindex     # embed every complaint into Qdrant (-- --missing: unsynced only)
 npm run vector:calibrate   # duplicate-threshold table (docs/database/vector-db.md)
-npm run test:smoke         # end-to-end check against a running dev server (BASE_URL, default :3000)
+npm run test:smoke         # end-to-end check over HTTP against a running app (BASE_URL, default :3000)
+npm run test:e2e           # Playwright browser tests: three role journeys + phone layout (installed Chrome)
+npm run docs:queries       # ../docs/database/queries.md with real query outputs
+npm run screenshots        # ../docs/screenshots/*.png + GIF frames (then python ../docs/screenshots/make_gif.py)
 ```
 
 ## Structure
