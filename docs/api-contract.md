@@ -13,10 +13,12 @@ const detail = await data.getComplaint(viewer, 42);
   SET LOCAL ROLE civic_staff;                        -- from a whitelist, never user input
   SELECT set_config('app.user_id', '12', true);      -- read by RLS policies and triggers
   SELECT set_config('app.role', 'STAFF', true);
+  SELECT set_config('app.department_id', '3', true); -- '' when NULL
+  SELECT set_config('app.ward_id', '1', true);
   …queries…
   COMMIT;
   ```
-- **Errors:** throw `DataError(message, code)` for expected failures. Server Actions show `message` to the user. Codes: `NOT_FOUND`, `FORBIDDEN`, `INVALID`, `CONFLICT`. Map Postgres errors (e.g. a trigger's `RAISE EXCEPTION` for an illegal transition, or a unique violation) to `DataError`.
+- **Errors:** throw `DataError(message, code)` for expected failures. SQL raises them with SQLSTATE `CF404`/`CF403`/`CF409`/`CF422` (see [backend/migrations-spec.md](backend/migrations-spec.md#errors-the-app-can-show)). Server Actions show `message` to the user. Codes: `NOT_FOUND`, `FORBIDDEN`, `INVALID`, `CONFLICT`. Map Postgres errors (e.g. a trigger's `RAISE EXCEPTION` for an illegal transition, or a unique violation) to `DataError`.
 - **Dates** are ISO strings; IDs are integers.
 
 ## Methods → SQL objects

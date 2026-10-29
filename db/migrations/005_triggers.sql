@@ -69,7 +69,7 @@ FOR EACH ROW EXECUTE FUNCTION trg_complaint_audit_status();
 
 CREATE OR REPLACE FUNCTION trg_complaint_insert_workflow()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
-DECLARE v_assignee integer;
+DECLARE v_assignee integer; v_prev_role text:=current_setting('app.role',true);
 BEGIN
   INSERT INTO status_history(complaint_id,history_no,old_status,new_status,changed_by,remarks)
   VALUES(NEW.complaint_id,1,NULL,'OPEN',NEW.filed_by,'Complaint filed');
@@ -77,6 +77,8 @@ BEGIN
   IF v_assignee IS NOT NULL THEN
     PERFORM set_config('app.role','SYSTEM',true);
     UPDATE complaint SET assigned_to=v_assignee,status='ASSIGNED' WHERE complaint_id=NEW.complaint_id;
+    -- Restore the caller's role so the rest of the transaction is not treated as SYSTEM.
+    PERFORM set_config('app.role',coalesce(v_prev_role,''),true);
     INSERT INTO notification(user_id,complaint_id,type,message)
     VALUES(v_assignee,NEW.complaint_id,'ASSIGNMENT','New complaint assigned: '||NEW.title);
   END IF;

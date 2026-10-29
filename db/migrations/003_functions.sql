@@ -144,4 +144,26 @@ RETURNS void LANGUAGE sql SECURITY DEFINER SET search_path=public AS $$
   DELETE FROM user_session WHERE token_hash=p_token_hash
 $$;
 
+-- Vector bookkeeping runs after the citizen's own transaction. Citizens have no
+-- UPDATE on complaint or INSERT on duplicate_match, so these definer functions
+-- do the two writes after checking the caller may see the complaint.
+CREATE OR REPLACE FUNCTION fn_mark_vector_synced(p_complaint_id integer,p_synced boolean)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
+BEGIN
+  IF current_setting('app.role',true) IS DISTINCT FROM 'ADMIN' AND NOT coalesce(fn_user_can_access_complaint(nullif(current_setting('app.user_id',true),'')::integer,p_complaint_id),false) THEN
+    RAISE EXCEPTION 'Complaint not found or access denied' USING ERRCODE='42501';
+  END IF;
+  UPDATE complaint SET vector_synced_at=CASE WHEN p_synced THEN now() END WHERE complaint_id=p_complaint_id;
+END $$;
+
+CREATE OR REPLACE FUNCTION fn_record_duplicate_match(p_complaint_id integer,p_matched_id integer,p_score numeric)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
+BEGIN
+  IF current_setting('app.role',true) IS DISTINCT FROM 'ADMIN' AND NOT coalesce(fn_user_can_access_complaint(nullif(current_setting('app.user_id',true),'')::integer,p_complaint_id),false) THEN
+    RAISE EXCEPTION 'Complaint not found or access denied' USING ERRCODE='42501';
+  END IF;
+  INSERT INTO duplicate_match(complaint_id,matched_complaint_id,similarity_score)
+  VALUES(p_complaint_id,p_matched_id,p_score) ON CONFLICT DO NOTHING;
+END $$;
+
 INSERT INTO schema_migrations(version) VALUES ('003_functions') ON CONFLICT DO NOTHING;
