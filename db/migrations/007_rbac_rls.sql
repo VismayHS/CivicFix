@@ -188,21 +188,40 @@ CREATE POLICY complaint_admin_update ON complaint FOR UPDATE TO civic_admin
               OR ward_id = nullif(current_setting('app.ward_id', true), '')::integer);
 
 -- app_user, user_phone, user_session -----------------------------------------
--- Everyone sees their own row; staff see their department; admins see all.
+-- Everyone sees their own row; staff see their department. The commissioner
+-- (app.ward_id empty) sees every user; a ward admin sees citizens, users of
+-- their own ward and city-wide users, and can only manage those.
 -- Names of other people come from vw_user_directory instead.
 CREATE POLICY user_read ON app_user FOR SELECT USING (
   (current_user <> 'civic_anon' AND user_id = nullif(current_setting('app.user_id', true), '')::integer)
-  OR current_user = 'civic_admin'
+  OR (current_user = 'civic_admin'
+      AND (nullif(current_setting('app.ward_id', true), '') IS NULL
+           OR role = 'CITIZEN' OR ward_id IS NULL
+           OR ward_id = nullif(current_setting('app.ward_id', true), '')::integer))
   OR (current_user = 'civic_staff' AND department_id = nullif(current_setting('app.department_id', true), '')::integer)
 );
-CREATE POLICY user_admin_insert ON app_user FOR INSERT TO civic_admin WITH CHECK (true);
-CREATE POLICY user_admin_update ON app_user FOR UPDATE TO civic_admin USING (true) WITH CHECK (true);
+CREATE POLICY user_admin_insert ON app_user FOR INSERT TO civic_admin
+  WITH CHECK (nullif(current_setting('app.ward_id', true), '') IS NULL
+              OR ward_id = nullif(current_setting('app.ward_id', true), '')::integer);
+CREATE POLICY user_admin_update ON app_user FOR UPDATE TO civic_admin
+  USING      (nullif(current_setting('app.ward_id', true), '') IS NULL
+              OR role = 'CITIZEN' OR ward_id IS NULL
+              OR ward_id = nullif(current_setting('app.ward_id', true), '')::integer)
+  WITH CHECK (nullif(current_setting('app.ward_id', true), '') IS NULL
+              OR role = 'CITIZEN' OR ward_id IS NULL
+              OR ward_id = nullif(current_setting('app.ward_id', true), '')::integer);
+-- Phones and sessions follow the user row: the EXISTS re-applies app_user's
+-- policy, so a ward admin reaches exactly the users they can see.
 CREATE POLICY phone_self_or_admin ON user_phone FOR ALL
-  USING      (user_id = nullif(current_setting('app.user_id', true), '')::integer OR current_user = 'civic_admin')
-  WITH CHECK (user_id = nullif(current_setting('app.user_id', true), '')::integer OR current_user = 'civic_admin');
+  USING      (user_id = nullif(current_setting('app.user_id', true), '')::integer
+              OR (current_user = 'civic_admin' AND EXISTS (SELECT 1 FROM app_user u WHERE u.user_id = user_phone.user_id)))
+  WITH CHECK (user_id = nullif(current_setting('app.user_id', true), '')::integer
+              OR (current_user = 'civic_admin' AND EXISTS (SELECT 1 FROM app_user u WHERE u.user_id = user_phone.user_id)));
 CREATE POLICY session_self_or_admin ON user_session FOR ALL
-  USING      (user_id = nullif(current_setting('app.user_id', true), '')::integer OR current_user = 'civic_admin')
-  WITH CHECK (user_id = nullif(current_setting('app.user_id', true), '')::integer OR current_user = 'civic_admin');
+  USING      (user_id = nullif(current_setting('app.user_id', true), '')::integer
+              OR (current_user = 'civic_admin' AND EXISTS (SELECT 1 FROM app_user u WHERE u.user_id = user_session.user_id)))
+  WITH CHECK (user_id = nullif(current_setting('app.user_id', true), '')::integer
+              OR (current_user = 'civic_admin' AND EXISTS (SELECT 1 FROM app_user u WHERE u.user_id = user_session.user_id)));
 
 -- Child tables: visible when the caller may see the complaint ---------------
 CREATE POLICY history_read ON status_history FOR SELECT

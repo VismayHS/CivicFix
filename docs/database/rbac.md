@@ -62,8 +62,9 @@ RLS is on for `complaint, app_user, user_phone, status_history, escalation, upvo
 | complaint | anon: all except merged duplicates · citizen: `filed_by = me` · staff: assigned to me, my ward and department, my department if I am its head, or escalated to me · ward admin: their ward · commissioner: all |
 | status_history, escalation, duplicate_match | Rows whose complaint the caller can see (`fn_user_can_access_complaint`) |
 | notification | Your own. Admins may also INSERT one for a complaint they can see (telling staff about a reassignment). |
-| app_user | Your own row; staff see their department; admins see everyone. Names of other people come from `vw_user_directory`, which exposes only name, role, department and ward. |
-| upvote, user_phone, user_session | Your own rows; admins all |
+| app_user | Your own row; staff see their department; the commissioner sees everyone; a ward admin sees citizens, their own ward's users and city-wide users, and can only create, update or deactivate those. Names of other people come from `vw_user_directory`, which exposes only name, role, department and ward. |
+| upvote | Your own rows; admins all |
+| user_phone, user_session | Your own rows; an admin reaches the rows of users they can see (the policy's `EXISTS` re-applies `app_user`'s policy) |
 
 `fn_user_can_access_complaint` is a `SECURITY DEFINER` function so a policy on `complaint` can look up the caller in `app_user` without recursing into `app_user`'s own policy.
 
@@ -74,7 +75,7 @@ RLS is on for `complaint, app_user, user_phone, status_history, escalation, upvo
 docker cp db/queries/rbac-demo.sql civicfix-db:/rbac-demo.sql
 docker exec civicfix-db psql -U postgres -d civicfix -f /rbac-demo.sql
 
-# 51 assertions, one transaction, rolled back at the end
+# 56 assertions, one transaction, rolled back at the end
 docker exec civicfix-db psql -U postgres -d civicfix -f /civicfix/tests/rbac.sql
 ```
 
@@ -85,4 +86,5 @@ In the app: **DB Lab → "RBAC: privilege matrix per database role"** and **"RBA
 - **Admin reassignment was failing.** RLS let an admin insert neither the "Reassigned" history row nor the notification to the new assignee. Added `history_admin_insert` and `notification_admin_insert`.
 - **Staff saw "Unknown" as the filer, and citizens saw staff history entries as "CivicFix automation"**, because RLS on `app_user` hid those rows. The detail queries now use `vw_user_directory`.
 - **Every role used to have SELECT/INSERT/UPDATE/DELETE on most tables** (including DELETE on `app_user` for citizens), with only RLS in the way. Each grant now matches what the app runs.
+- **Ward admins could see and deactivate users city-wide.** `app_user`, `user_phone` and `user_session` are now scoped to the admin's ward (citizens and city-wide users stay visible).
 - **The app connected as the `postgres` superuser.** It now connects as `civic_app`, which has no privileges until it switches role.
