@@ -5,7 +5,7 @@
 | File | Checks |
 |---|---|
 | `smoke.sql` | Authentication, RLS, triggers, status change, SLA procedure |
-| `rbac.sql` | 51 GRANT and RLS assertions, role by role: what each role may do and what it must be refused. Pattern worth copying: a `denied(label, sql)` helper that passes only on SQLSTATE 42501. |
+| `rbac.sql` | 56 GRANT and RLS assertions, role by role: what each role may do and what it must be refused. Pattern worth copying: a `denied(label, sql)` helper that passes only on SQLSTATE 42501. |
 
 For the app as a whole, `npm run test:smoke` in `web/` drives every page and the main flows over HTTP.
 

@@ -70,15 +70,26 @@ FOR EACH ROW EXECUTE FUNCTION trg_complaint_audit_status();
 CREATE OR REPLACE FUNCTION trg_complaint_insert_workflow()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
 DECLARE v_assignee integer; v_prev_role text:=current_setting('app.role',true);
+  v_prev_user text:=current_setting('app.user_id',true);
+  v_prev_actor text:=current_setting('app.status_actor',true);
+  v_prev_remarks text:=current_setting('app.status_remarks',true);
 BEGIN
   INSERT INTO status_history(complaint_id,history_no,old_status,new_status,changed_by,remarks)
   VALUES(NEW.complaint_id,1,NULL,'OPEN',NEW.filed_by,'Complaint filed');
   v_assignee:=fn_pick_assignee(NEW.department_id,NEW.ward_id);
   IF v_assignee IS NOT NULL THEN
+    -- The assignment is done by the system, not the citizen: no actor, so the
+    -- history row shows "CivicFix automation", with a remark naming the assignee.
     PERFORM set_config('app.role','SYSTEM',true);
+    PERFORM set_config('app.user_id','',true);
+    PERFORM set_config('app.status_actor','',true);
+    PERFORM set_config('app.status_remarks','Auto-assigned to '||(SELECT name FROM app_user WHERE user_id=v_assignee),true);
     UPDATE complaint SET assigned_to=v_assignee,status='ASSIGNED' WHERE complaint_id=NEW.complaint_id;
-    -- Restore the caller's role so the rest of the transaction is not treated as SYSTEM.
+    -- Restore the caller's settings so the rest of the transaction is not treated as SYSTEM.
     PERFORM set_config('app.role',coalesce(v_prev_role,''),true);
+    PERFORM set_config('app.user_id',coalesce(v_prev_user,''),true);
+    PERFORM set_config('app.status_actor',coalesce(v_prev_actor,''),true);
+    PERFORM set_config('app.status_remarks',coalesce(v_prev_remarks,''),true);
     INSERT INTO notification(user_id,complaint_id,type,message)
     VALUES(v_assignee,NEW.complaint_id,'ASSIGNMENT','New complaint assigned: '||NEW.title);
   END IF;

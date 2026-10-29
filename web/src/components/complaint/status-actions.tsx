@@ -24,9 +24,10 @@ function copyFor(to: ComplaintStatus, from: ComplaintStatus, role: Role): Copy |
     case "RESOLVED":
       return { label: "Mark resolved", title: "Mark as resolved", description: "Describe what was done. The citizen will be asked to confirm the fix.", needsNote: true };
     case "CLOSED":
-      return role === "CITIZEN"
-        ? { label: "Confirm it's fixed", title: "Confirm the fix", description: "This closes the complaint. Thank you for checking.", needsNote: false }
-        : { label: "Close complaint", title: "Close without resolution", description: "Use this for invalid or out-of-scope reports. Explain why.", needsNote: true, variant: "outline" };
+      // A citizen closing an unresolved complaint is a withdrawal, which has its own button.
+      if (role === "CITIZEN")
+        return from === "RESOLVED" ? { label: "Confirm it's fixed", title: "Confirm the fix", description: "This closes the complaint. Thank you for checking.", needsNote: false } : null;
+      return { label: "Close complaint", title: "Close without resolution", description: "Use this for invalid or out-of-scope reports. Explain why.", needsNote: true, variant: "outline" };
     case "REOPENED":
       return { label: "Not fixed, reopen", title: "Reopen this complaint", description: "Tell the team what is still wrong. It goes back to them with its history.", needsNote: true, variant: "outline" };
     default:
