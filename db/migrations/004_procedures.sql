@@ -23,6 +23,7 @@ END $$;
 CREATE OR REPLACE PROCEDURE sp_escalate_overdue()
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 DECLARE v_c record; v_p record; v_target integer; v_from integer; v_source integer; v_count integer:=0;
+  v_prev_role text:=current_setting('app.role',true); v_prev_user text:=current_setting('app.user_id',true);
 BEGIN
   -- sp_escalate_overdue is called by pg_cron (role=SYSTEM) or by an admin/staff
   -- triggering a manual sweep. It has no per-complaint scope, so we only
@@ -59,9 +60,10 @@ BEGIN
       PERFORM set_config('app.role','SYSTEM',true);
       PERFORM set_config('app.user_id','',true);
       UPDATE complaint SET status='ESCALATED',updated_at=now() WHERE complaint_id=v_c.complaint_id;
+      PERFORM set_config('app.role',coalesce(v_prev_role,''),true);
+      PERFORM set_config('app.user_id',coalesce(v_prev_user,''),true);
     END IF;
   END LOOP;
-  PERFORM set_config('app.role',coalesce(nullif(current_setting('app.role',true),''),'SYSTEM'),true);
 END $$;
 
 CREATE OR REPLACE PROCEDURE sp_confirm_duplicate(p_complaint_id integer,p_matched_id integer,p_actor integer)

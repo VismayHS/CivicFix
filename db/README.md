@@ -54,10 +54,10 @@ docker compose exec -T db psql -v ON_ERROR_STOP=1 -U postgres -d civicfix -f /ci
 | `migrations/007_rbac_rls.sql` | Role grants and row-level access policies | Implemented; review before deployment |
 | `migrations/008_cron.sql` | `pg_cron` SLA sweep, stats refresh, expired-session cleanup | Implemented |
 | `queries/*.sql` | The 14 DB Lab queries (copy SQL from `web/src/lib/data/mock/lab.ts`) | **To do** |
-| `tests/smoke.sql` | Authentication, RLS, triggers, status change, SLA procedure smoke checks | Added; database run pending |
-| Qdrant | Collection/index creation, embeddings, search, and reindexing in the web adapter | Implemented; runtime verification pending |
+| `tests/smoke.sql` | Authentication, RLS, triggers, status change, SLA procedure smoke checks | Passes |
+| Qdrant | Collection/index creation, MiniLM embeddings (in Node), search, and reindexing in the web adapter | Works: 176 points indexed, duplicate detection verified |
 
-Historical verification on 25 Oct 2026 covered only 001 + 002 + the seed. The newer migrations and smoke script have not yet been executed in this workspace because Docker/PostgreSQL are unavailable here.
+Verified on 29 Oct 2026: 001 to 008 + seed apply on an empty volume, `tests/smoke.sql` passes, all 14 DB Lab queries run, and every page works for all three roles with `DATA_SOURCE=postgres`. After a fresh start, open the Vector console as admin and click Reindex to load Qdrant.
 
 The local `.env` uses the Postgres administrator account for convenience. For a
 deployed app, provision a dedicated login as a member of the four group roles,
