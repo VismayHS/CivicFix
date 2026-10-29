@@ -27,16 +27,16 @@ Payload per point (the mock's `vectorPayload()` builds the same object):
 
 - Package `@huggingface/transformers`, model `Xenova/all-MiniLM-L6-v2`, `pipeline("feature-extraction", …)` with `{ pooling: "mean", normalize: true }`. It runs locally in Node, so there is no API key and no cost. The first call downloads about 25 MB; cache the pipeline in a module-level variable.
 - Text embedded: `` `${title}. ${description}` ``. Use the same template everywhere, or scores drift.
-- Put this in `web/src/lib/vector/embed.ts` and the Qdrant client (`@qdrant/js-client-rest`) in `web/src/lib/vector/qdrant.ts`, both `import "server-only"`.
+- Built: embeddings and the Qdrant REST calls (plain `fetch`, no client library) are in `web/src/lib/vector/core.ts`, shared by the data source and the scripts.
 
-## Scripts (`db/qdrant/`)
+## Scripts (built in `web/scripts/`)
 
 | Script | Does |
 |---|---|
-| `setup.ts` | Create the collection if missing and create the 5 payload indexes. Idempotent. |
-| `reindex.ts` | Read every complaint from Postgres, embed in batches of 32, upsert, set `complaint.vector_synced_at = now()`. With `--missing`, only rows where `vector_synced_at IS NULL` (uses `idx_complaint_unsynced`). |
+| `vector-setup.ts` | Create the collection if missing and create the 6 payload indexes. Idempotent. |
+| `vector-reindex.ts` | Read every complaint from Postgres, embed in batches of 32, upsert, set `complaint.vector_synced_at = now()`. With `--missing`, only rows where `vector_synced_at IS NULL` (uses `idx_complaint_unsynced`). |
 
-Add `npm run vector:setup` and `npm run vector:reindex` in `web/package.json`, and a line in `db/README.md`.
+Run with `npm run vector:setup` and `npm run vector:reindex` from `web/`; `npm run vector:calibrate` prints the threshold table. Results: [docs/database/vector-db.md](../database/vector-db.md).
 
 ## Contract methods → Qdrant calls
 
@@ -57,7 +57,7 @@ Add `npm run vector:setup` and `npm run vector:reindex` in `web/package.json`, a
 
 ## Calibrate the threshold
 
-`DUPLICATE_THRESHOLD = 0.55` in `web/src/lib/constants.ts` was tuned for the mock's word-overlap similarity. Real MiniLM cosine scores sit on a different scale. After the first reindex:
+**Done (0.70, see vector-db.md).** `DUPLICATE_THRESHOLD = 0.55` in `web/src/lib/constants.ts` was tuned for the mock's word-overlap similarity. Real MiniLM cosine scores sit on a different scale. After the first reindex:
 
 1. The seed contains paraphrased re-reports (the `duplicate_match` rows). Score each pair with Qdrant.
 2. Score an equal number of random pairs from the same ward that are not duplicates.

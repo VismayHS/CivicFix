@@ -1,6 +1,13 @@
 # SQL tests (`db/tests/`)
 
-**Owner: Ashvin.** Assertion scripts that prove the database enforces the rules on its own, with no app involved.
+**Owner: Ashvin** (Vismay: `rbac.sql`). Assertion scripts that prove the database enforces the rules on its own, with no app involved.
+
+| File | Checks |
+|---|---|
+| `smoke.sql` | Authentication, RLS, triggers, status change, SLA procedure |
+| `rbac.sql` | 51 GRANT and RLS assertions, role by role: what each role may do and what it must be refused. Pattern worth copying: a `denied(label, sql)` helper that passes only on SQLSTATE 42501. |
+
+For the app as a whole, `npm run test:smoke` in `web/` drives every page and the main flows over HTTP.
 
 - One file per migration: `003_functions_test.sql`, `005_triggers_test.sql`, `007_rls_test.sql`, …
 - Each test runs inside `BEGIN … ROLLBACK`, so the seed is never changed.
