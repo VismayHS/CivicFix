@@ -8,26 +8,33 @@ Citizens report potholes, garbage, leaks and broken streetlights. Each complaint
 |---|---|
 | **Team** | Vismay HS (PES1UG24AM325): frontend, views, RBAC/RLS, queries, vector DB · Ashvin Ronald Lobo (PES1UG24AM345): functions, procedures, triggers, cron, tests |
 | **Stack** | Next.js 16 · React 19 · TypeScript · Tailwind v4 · shadcn/ui · React Bits · PostgreSQL 17 + pg_cron · Qdrant |
-| **Status** | Frontend complete on mock data · schema v2 + seed loaded in Postgres · backend functions, triggers, RLS and Qdrant in progress |
+| **Status** | PostgreSQL adapter and database workflows implemented; local container/runtime verification and production hardening remain |
 
 ## Run it locally
 
-Requires Node 22+ and Docker.
+Requires Node 22+ and Docker Desktop (with the Linux container engine running).
 
 ```bash
 git clone https://github.com/VismayHS/CivicFix.git
 cd CivicFix
 
-# 1. Frontend (works on its own with in-memory demo data)
+# 1. Start PostgreSQL, Qdrant, and the local embedding service
+cp .env.example .env
+docker compose up -d --build
+docker compose exec db bash /civicfix/migrate.sh
+docker compose exec ollama ollama pull nomic-embed-text
+
+# 2. Start the app against the real backend
 cd web
 cp .env.example .env.local
 npm install
 npm run dev                        # http://localhost:3000
-
-# 2. Databases (optional until the postgres data source is ready)
-cd ..
-docker compose up -d --build       # Postgres :5432 (schema + seed), Qdrant :6333
 ```
+
+The sample `.env` and `web/.env.local` use the local database password
+`civicfix-local`. If you change `POSTGRES_PASSWORD`, update the password in
+`DATABASE_URL` too. Use `DATA_SOURCE=mock` in `web/.env.local` only when you
+want the in-memory UI demo without the services.
 
 ### Demo accounts (password `civicfix123`)
 
