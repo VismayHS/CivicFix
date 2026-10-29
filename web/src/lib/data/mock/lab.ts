@@ -1,17 +1,19 @@
-import { OPEN_STATES } from "../../constants";
+import { OPEN_STATES } from "../../constants.ts";
 import type { LabQuery, LabResult } from "../../types";
-import { DataError } from "../contract";
+import { DataError } from "../contract.ts";
 import type { MockDb } from "./seed";
 
 /**
  * Rubric query catalogue shown on /admin/db-lab.
- * `sql` is the real PostgreSQL text (Ashvin: keep db/queries/*.sql identical).
+ * `sql` is the real PostgreSQL text. db/queries/*.sql is generated from this list
+ * (`npm run db:queries`), so the page and the files never disagree.
  * `run` computes the same result over the mock data so the page works today.
  */
 
 type Row = (string | number | null)[];
 interface LabEntry extends LabQuery {
-  run: (d: MockDb) => { columns: string[]; rows: Row[] };
+  /** Mock implementation; omitted for queries that read Postgres-only objects (views, catalog). */
+  run?: (d: MockDb) => { columns: string[]; rows: Row[] };
 }
 
 const H = 3_600_000;
@@ -409,11 +411,106 @@ LIMIT 10;`,
         .map((x) => [x.c.complaintId, x.c.title, Math.round(x.rank * 1000) / 1000]),
     }),
   },
+  // ---- Views from 006_views.sql and RBAC from 007_rbac_rls.sql (Vismay). These read
+  // database objects the mock cannot imitate, so they have no `run` and need DATA_SOURCE=postgres.
+  {
+    id: "view-full-detail",
+    title: "Slowest resolutions (view with a derived attribute)",
+    concept: "vw_complaint_full_detail · resolution_time = resolved_at − created_at",
+    rubricItem: "8 · View",
+    description: "The Lab 4 full-detail view on schema v2. resolution_time is the derived attribute from the ER diagram: computed in the view, never stored.",
+    sql: `SELECT complaint_id, title, department_name, ward_name,
+       assigned_to_name, resolution_time, resolved_within_sla
+FROM vw_complaint_full_detail
+WHERE resolved_at IS NOT NULL
+ORDER BY resolution_time DESC
+LIMIT 10;`,
+  },
+  {
+    id: "view-department-workload",
+    title: "Department workload (view)",
+    concept: "vw_department_workload · aggregate view with FILTER",
+    rubricItem: "8 · View",
+    description: "Open, in-progress, escalated and breached counts per department with historical SLA performance. security_invoker, so a ward admin sees only their ward.",
+    sql: `SELECT department_name, waiting, in_progress, escalated, breached_now,
+       avg_resolution_hours, sla_met_pct, active_staff
+FROM vw_department_workload
+ORDER BY breached_now DESC, department_name;`,
+  },
+  {
+    id: "view-escalation-chain",
+    title: "Escalation chains (view)",
+    concept: "vw_escalation_chain · joins escalation, policy and the user directory",
+    rubricItem: "8 · View",
+    description: "Every escalation step with who it came from and who it went to. Level 1 goes to the department head, 2 to the ward admin, 3 to the commissioner.",
+    sql: `SELECT complaint_id, escalation_level, level_label,
+       escalated_from_name, escalated_to_name, escalated_to_role, still_open
+FROM vw_escalation_chain
+ORDER BY complaint_id DESC, escalation_level
+LIMIT 20;`,
+  },
+  {
+    id: "view-sla-breach-candidates",
+    title: "SLA clock: what breaches next (view)",
+    concept: "vw_sla_breach_candidates · CTE inside a view",
+    rubricItem: "8 · View",
+    description: "Open complaints with hours left on their SLA (negative = breached) and when the next escalation level falls due. This is the work list of sp_escalate_overdue().",
+    sql: `SELECT complaint_id, title, status, ward_name, hours_left,
+       current_level, next_level, next_level_due_at
+FROM vw_sla_breach_candidates
+ORDER BY hours_left
+LIMIT 15;`,
+  },
+  {
+    id: "rbac-privilege-matrix",
+    title: "RBAC: privilege matrix per database role",
+    concept: "has_table_privilege / has_any_column_privilege over pg_class",
+    rubricItem: "12 · RBAC in the database",
+    description: "What each of the four group roles may do on every table and view, read live from the catalog. (cols) means a column-level GRANT, finer than the table.",
+    sql: `WITH roles(role) AS (
+  VALUES ('civic_anon'), ('civic_citizen'), ('civic_staff'), ('civic_admin')
+), privs AS (
+  SELECT c.relname, r.role,
+         concat_ws(', ',
+           CASE WHEN has_table_privilege(r.role, c.oid, 'SELECT') THEN 'SELECT'
+                WHEN has_any_column_privilege(r.role, c.oid, 'SELECT') THEN 'SELECT(cols)' END,
+           CASE WHEN has_table_privilege(r.role, c.oid, 'INSERT') THEN 'INSERT'
+                WHEN has_any_column_privilege(r.role, c.oid, 'INSERT') THEN 'INSERT(cols)' END,
+           CASE WHEN has_table_privilege(r.role, c.oid, 'UPDATE') THEN 'UPDATE'
+                WHEN has_any_column_privilege(r.role, c.oid, 'UPDATE') THEN 'UPDATE(cols)' END,
+           CASE WHEN has_table_privilege(r.role, c.oid, 'DELETE') THEN 'DELETE' END) AS granted
+  FROM pg_class c
+  JOIN pg_namespace n ON n.oid = c.relnamespace
+  CROSS JOIN roles r
+  WHERE n.nspname = 'public' AND c.relkind IN ('r', 'v', 'm') AND c.relname <> 'schema_migrations'
+)
+SELECT relname AS object,
+       coalesce(nullif(max(granted) FILTER (WHERE role = 'civic_anon'), ''), '–')    AS anon,
+       coalesce(nullif(max(granted) FILTER (WHERE role = 'civic_citizen'), ''), '–') AS citizen,
+       coalesce(nullif(max(granted) FILTER (WHERE role = 'civic_staff'), ''), '–')   AS staff,
+       coalesce(nullif(max(granted) FILTER (WHERE role = 'civic_admin'), ''), '–')   AS admin
+FROM privs
+GROUP BY relname
+ORDER BY relname;`,
+  },
+  {
+    id: "rbac-rls-policies",
+    title: "RBAC: row-level security policies",
+    concept: "pg_policies catalog view",
+    rubricItem: "12 · RBAC in the database",
+    description: "Every RLS policy: the table, the command it guards, the roles it applies to and its USING expression. Rows with no matching policy are invisible (default deny).",
+    sql: `SELECT tablename, policyname, cmd, roles,
+       left(regexp_replace(coalesce(qual, with_check), '\s+', ' ', 'g'), 110) AS rule
+FROM pg_policies
+WHERE schemaname = 'public'
+ORDER BY tablename, policyname;`,
+  },
 ];
 
 export function runLab(d: MockDb, id: string): LabResult {
   const q = LAB_QUERIES.find((x) => x.id === id);
   if (!q) throw new DataError("Unknown query.", "NOT_FOUND");
+  if (!q.run) throw new DataError("This query reads Postgres views or catalogs. Run the app with DATA_SOURCE=postgres to try it.", "INVALID");
   const t0 = performance.now();
   const { columns, rows } = q.run(d);
   return { columns, rows, rowCount: rows.length, elapsedMs: Math.round((performance.now() - t0) * 100) / 100, source: "mock" };

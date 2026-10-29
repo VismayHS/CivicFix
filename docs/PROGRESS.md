@@ -1,6 +1,6 @@
 # Progress
 
-Last updated: 29 Oct 2026 (after reviewing and merging Ashvin's backend). Tick boxes in the same PR as the work.
+Last updated: 29 Oct 2026 (Vismay's database, RBAC and vector work merged). Tick boxes in the same PR as the work.
 
 ## Scoreboard against the rubric
 
@@ -9,22 +9,22 @@ Last updated: 29 Oct 2026 (after reviewing and merging Ashvin's backend). Tick b
 | # | Rubric item | Max | Done | What exists | What is missing | Owner |
 |---|---|---|---|---|---|---|
 | 1 | ER diagram | 2 | 30% | Lab 4 Chen diagram | ER v2 for the 15 tables | Ashvin |
-| 2 | Relational schema | 3 | 60% | `schema-v2.md` with ER → relational mapping | Relational schema v2 diagram | Vismay |
+| 2 | Relational schema | 3 | 90% | `schema-v2.md` with ER → relational mapping; `relational-schema-v2.svg/.png` generated from the live DB | Explain the mapping in the report | Vismay |
 | 3 | DDL with constraints | 4 | 100% | `001_schema.sql`: 15 tables, named PK/FK/UNIQUE/CHECK, 22 indexes | – | Ashvin reviews |
-| 4 | Vector DB creation | 4 | 80% | Collection (384-d, cosine), 5 payload indexes, MiniLM embeddings in Node, reindex from the Vector console | Standalone `db/qdrant` scripts, threshold calibration write-up | Vismay |
+| 4 | Vector DB creation | 4 | 100% | Collection (384-d, cosine), 6 payload indexes, MiniLM in Node, `npm run vector:setup / vector:reindex`, `vector-db.md` | – | Vismay |
 | 5 | Technology justification | 1 | 100% | `database/technology-justification.md` | – | – |
 | 6 | DML operations | 4 | 85% | Every write flow runs on Postgres (file, status, assign, upvote, withdraw, duplicate review, users) | DML examples in the report | Ashvin |
-| 7 | Nested / correlated / recursive / joins | 4 | 80% | 14 queries, all 14 run on Postgres and in DB Lab | `db/queries/*.sql`, outputs in report | Vismay |
-| 8 | Procedures, functions, triggers, CTEs | 6 | 75% | 003 to 008 applied and working: 15 functions, 3 procedures, 6 triggers, 3 views + 1 MV, 3 cron jobs | `sp_auto_close_resolved`, Lab 4 `vw_*` views, more tests | Ashvin (003–005, 008), Vismay (006) |
-| 9 | Vector Read / Update / Delete | 7 | 75% | Real Qdrant search, payload update, delete, sync on create/status/withdraw; duplicate detection verified (paraphrase 0.75) | Threshold calibration, demo in report | Vismay |
+| 7 | Nested / correlated / recursive / joins | 4 | 90% | 20 queries in DB Lab and `db/queries/*.sql` (generated), all run as `civic_admin` | Outputs in `queries.md` / report | Vismay |
+| 8 | Procedures, functions, triggers, CTEs | 6 | 80% | 003 to 008 applied and working: 15 functions, 3 procedures, 6 triggers, 10 views + 1 MV, 3 cron jobs | `sp_auto_close_resolved` + cron, more assertion tests | Ashvin (003–005, 008), Vismay (006) |
+| 9 | Vector Read / Update / Delete | 7 | 90% | Search, payload update, delete, sync on create/status/merge/withdraw; threshold calibrated to 0.70 (F2, seeded pairs); verified end to end | Screenshots/demo in report | Vismay |
 | 10 | Next.js interface | 3 | 95% | Every page for 3 roles, responsive, no console errors | Polish pass | Vismay |
-| 11 | Backend/API integration | 2 | 85% | Postgres data source for every method, 11 REST routes | Readability pass on the data source | Both |
-| 12 | Auth, 2+ roles, RBAC in DB | 4 | 80% | 4 DB roles, GRANTs, RLS on 9 tables, sessions in DB | Tighten the GRANT matrix (least privilege), RBAC demo queries | Vismay |
-| 13 | Documentation, Git/GitHub | 2 | 80% | README, docs/, branches, PRs | Final report, demo GIF | Both |
-| 14 | Originality, contribution, viva | 4 | 30% | Commits from both accounts | Split the remaining work so both own SQL objects; viva prep | Both |
-| | **Total** | **50** | **≈ 75%** | about 37 of 50 marks of work in place | | |
+| 11 | Backend/API integration | 2 | 90% | Postgres data source for every method, 11 REST routes, formatted, vector code split into `lib/vector/core.ts`, `npm run test:smoke` | – | Both |
+| 12 | Auth, 2+ roles, RBAC in DB | 4 | 95% | `civic_app` NOINHERIT login + 4 roles, least-privilege GRANTs (column-level), RLS on 9 tables, `tests/rbac.sql`, `rbac-demo.sql`, `rbac.md` | Rehearse the demo | Vismay |
+| 13 | Documentation, Git/GitHub | 2 | 85% | README, docs/ (incl. `vector-db.md`, `rbac.md`), branches, PRs | Final report, demo GIF | Both |
+| 14 | Originality, contribution, viva | 4 | 40% | Both own SQL objects now (Vismay: 006, 007, queries, Qdrant, RBAC tests) | Ashvin works from his own account via PRs; viva prep | Both |
+| | **Total** | **50** | **≈ 84%** | about 42 of 50 marks of work in place | | |
 
-The app now runs end to end on PostgreSQL + Qdrant. What is left is mostly diagrams (items 1, 2), the report and viva prep, plus the gaps listed below.
+The app runs end to end on PostgreSQL + Qdrant as the least-privilege `civic_app` login. What is left: ER diagram v2, Ashvin's `sp_auto_close_resolved` and tests, the report and viva prep.
 
 ## Foundation (done)
 
@@ -51,16 +51,19 @@ Frontend
 Database
 
 - [x] `006_views.sql`: summary + stats views, `mv_public_ward_stats` (built by Ashvin)
-- [ ] `006_views.sql`: add the 4 Lab 4 `vw_*` views for v2
+- [x] `006_views.sql`: 4 Lab 4 `vw_*` views for v2, `vw_user_directory`, `vw_public_*`
 - [x] `007_rbac_rls.sql`: 4 roles, GRANTs, RLS policies (built by Ashvin, fixed in review)
-- [ ] `007_rbac_rls.sql`: least-privilege GRANT pass, `civic_app` login role
-- [ ] `db/queries/*.sql`: the 14 queries + view and RBAC demo queries
+- [x] `007_rbac_rls.sql`: least-privilege GRANT pass, `civic_app` login role, admin reassign fixed
+- [x] `db/queries/*.sql`: the 14 queries + 4 view and 2 RBAC queries (generated), `rbac-demo.sql`
+- [x] `db/tests/rbac.sql`: GRANT and RLS assertions per role
 - [x] Qdrant: collection, payload indexes, MiniLM embeddings, reindex (in the data source)
 - [x] Qdrant: sync on create / status change / withdraw; Vector console on real data
-- [ ] Duplicate threshold calibrated, `docs/database/vector-db.md`
+- [x] Qdrant scripts (`npm run vector:setup / reindex / calibrate`)
+- [x] Duplicate threshold calibrated (0.70), `docs/database/vector-db.md`, `docs/database/rbac.md`
 - [x] Postgres data source: every contract method (built by Ashvin)
 - [x] REST API `/api/v1/*` (built by Ashvin)
-- [ ] Relational schema v2 diagram (PNG + SVG)
+- [x] Relational schema v2 diagram (PNG + SVG, generated from the live DB)
+- [x] `npm run test:smoke`: every page for every role + main flows over HTTP
 
 ## Ashvin
 
