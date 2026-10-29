@@ -112,4 +112,11 @@ export const ROLE_HOME: Record<Role, string> = {
   ADMIN: "/admin",
 };
 
-export const DUPLICATE_THRESHOLD = 0.55;
+/**
+ * Cosine similarity (all-MiniLM-L6-v2) at or above which a new report is
+ * flagged as a possible duplicate. Calibrated on the seed with
+ * `npm run vector:calibrate`; numbers and reasoning in docs/database/vector-db.md.
+ */
+export const DUPLICATE_THRESHOLD = 0.7;
+/** The mock source scores word overlap, which sits on a lower scale. */
+export const MOCK_DUPLICATE_THRESHOLD = 0.55;

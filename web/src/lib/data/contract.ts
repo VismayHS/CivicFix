@@ -110,11 +110,12 @@ export interface DataSource {
 }
 
 export class DataError extends Error {
-  constructor(
-    message: string,
-    public readonly code: "NOT_FOUND" | "FORBIDDEN" | "INVALID" | "CONFLICT" = "INVALID",
-  ) {
+  // A plain field rather than a constructor parameter property, so Node's
+  // type stripping can load this file for the CLI scripts in web/scripts.
+  readonly code: "NOT_FOUND" | "FORBIDDEN" | "INVALID" | "CONFLICT";
+  constructor(message: string, code: DataError["code"] = "INVALID") {
     super(message);
     this.name = "DataError";
+    this.code = code;
   }
 }

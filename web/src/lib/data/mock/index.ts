@@ -1,6 +1,6 @@
 import "server-only";
 import { connection } from "next/server";
-import { DUPLICATE_THRESHOLD, OPEN_STATES, STATUS_TRANSITIONS } from "../../constants";
+import { MOCK_DUPLICATE_THRESHOLD as DUPLICATE_THRESHOLD, OPEN_STATES, STATUS_TRANSITIONS } from "../../constants";
 import type {
   ComplaintDetail,
   ComplaintFilter,
