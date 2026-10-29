@@ -6,7 +6,7 @@ Citizens report potholes, garbage, leaks and broken streetlights. Each complaint
 
 | Item | Detail |
 |---|---|
-| **Team** | Vismay HS (PES1UG24AM325): frontend · Ashvin Ronald Lobo (PES1UG24AM345): backend |
+| **Team** | Vismay HS (PES1UG24AM325): frontend, views, RBAC/RLS, queries, vector DB · Ashvin Ronald Lobo (PES1UG24AM345): functions, procedures, triggers, cron, tests |
 | **Stack** | Next.js 16 · React 19 · TypeScript · Tailwind v4 · shadcn/ui · React Bits · PostgreSQL 17 + pg_cron · Qdrant |
 | **Status** | PostgreSQL adapter and database workflows implemented; local container/runtime verification and production hardening remain |
 
@@ -18,11 +18,10 @@ Requires Node 22+ and Docker Desktop (with the Linux container engine running).
 git clone https://github.com/VismayHS/CivicFix.git
 cd CivicFix
 
-# 1. Start PostgreSQL, Qdrant, and the local embedding service
+# 1. Start PostgreSQL and Qdrant
 cp .env.example .env
 docker compose up -d --build
 docker compose exec db bash /civicfix/migrate.sh
-docker compose exec ollama ollama pull nomic-embed-text
 
 # 2. Start the app against the real backend
 cd web
@@ -58,18 +57,21 @@ The login page has one-click buttons for these.
 
 ```text
 CivicFix/
-├─ web/                   Next.js app (frontend, Vismay)
-│  └─ src/lib/data/       contract.ts · mock/ (works today) · postgres/ (Ashvin)
-├─ db/                    PostgreSQL + Qdrant (backend, Ashvin)
+├─ web/                   Next.js app
+│  └─ src/lib/data/       contract.ts · mock/ (works today) · postgres/ (in progress)
+├─ db/                    PostgreSQL + Qdrant
 │  ├─ migrations/         001_schema.sql, 002_reference_data.sql, 003+ to come
-│  └─ seed/               demo data (generated from the same dataset as the mock)
+│  ├─ seed/               demo data (generated from the same dataset as the mock)
+│  ├─ queries/            rubric query catalogue
+│  ├─ tests/              SQL assertion tests
+│  └─ qdrant/             vector collection setup and reindex
 ├─ docs/                  plan, context PDFs, schema v2, API contract, design, team workflow
 └─ docker-compose.yml
 ```
 
 ## Documentation
 
-Start with [docs/README.md](docs/README.md). Key pages: [team workflow and task split](docs/team-workflow.md), [API contract](docs/api-contract.md), [schema v2](docs/database/schema-v2.md), [technology justification](docs/database/technology-justification.md), [design system](docs/design/DESIGN.md), [build plan PDF](docs/plan/status-and-build-plan.pdf).
+Start with [docs/README.md](docs/README.md). Progress: [docs/PROGRESS.md](docs/PROGRESS.md). Database work: [docs/backend/](docs/backend/README.md). Key pages: [team workflow and task split](docs/team-workflow.md), [API contract](docs/api-contract.md), [schema v2](docs/database/schema-v2.md), [technology justification](docs/database/technology-justification.md), [design system](docs/design/DESIGN.md), [build plan PDF](docs/plan/status-and-build-plan.pdf).
 
 ## Rubric map
 

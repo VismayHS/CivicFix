@@ -48,8 +48,8 @@ src/
 
 From the repository root, copy `.env.example` to `.env`, start services with
 `docker compose up -d --build`, apply any pending migrations with
-`docker compose exec db bash /civicfix/migrate.sh`, then download the local embedding model with
-`docker compose exec ollama ollama pull nomic-embed-text`. In this directory,
+`docker compose exec db bash /civicfix/migrate.sh`. The embedding model
+(all-MiniLM-L6-v2, about 25 MB) downloads inside Node on first use. In this directory,
 copy `.env.example` to `.env.local`, install packages, and run `npm run dev`.
 Set `DATABASE_URL` to match the root `POSTGRES_PASSWORD` if you changed its
 local default. Docker applies database migrations and demo seed on the first
