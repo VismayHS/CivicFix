@@ -12,7 +12,9 @@
 | [database/technology-justification.md](database/technology-justification.md) | Why PostgreSQL + Qdrant + MiniLM (rubric item 5) |
 | [database/vector-db.md](database/vector-db.md) | Qdrant collection, vector CRUD, scripts, duplicate-threshold calibration |
 | [database/rbac.md](database/rbac.md) | Roles, least-privilege GRANT matrix, RLS policies, demo and tests |
+| [database/queries.md](database/queries.md) | The 20 rubric queries with their real outputs (generated) |
+| [screenshots/](screenshots/) | App screenshots and the duplicate-detection demo GIF (generated) |
 | [design/DESIGN.md](design/DESIGN.md) | Design system: tokens, type, the SLA clock, motion rules, UI toolkit |
 | [diagrams/](diagrams/) | Lab 4 ER and relational diagrams; `relational-schema-v2.svg/.png` (generated from the live database by `relational_schema_v2.py`) |
 
-Still to write (see [team-workflow.md](team-workflow.md)): `database/queries.md` (query catalogue with outputs), ER diagram v2, `CONTRIBUTIONS.md`, `demo-script.md`, the final report PDF.
+Still to write (see [team-workflow.md](team-workflow.md)): ER diagram v2, `CONTRIBUTIONS.md`, `demo-script.md`, the final report PDF.

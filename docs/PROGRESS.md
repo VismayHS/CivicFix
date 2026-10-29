@@ -14,17 +14,17 @@ Last updated: 29 Oct 2026 (Vismay's database, RBAC and vector work merged). Tick
 | 4 | Vector DB creation | 4 | 100% | Collection (384-d, cosine), 6 payload indexes, MiniLM in Node, `npm run vector:setup / vector:reindex`, `vector-db.md` | – | Vismay |
 | 5 | Technology justification | 1 | 100% | `database/technology-justification.md` | – | – |
 | 6 | DML operations | 4 | 85% | Every write flow runs on Postgres (file, status, assign, upvote, withdraw, duplicate review, users) | DML examples in the report | Ashvin |
-| 7 | Nested / correlated / recursive / joins | 4 | 90% | 20 queries in DB Lab and `db/queries/*.sql` (generated), all run as `civic_admin` | Outputs in `queries.md` / report | Vismay |
+| 7 | Nested / correlated / recursive / joins | 4 | 100% | 20 queries in DB Lab and `db/queries/*.sql`; real outputs in `docs/database/queries.md` (`npm run docs:queries`) | Paste into the report | Vismay |
 | 8 | Procedures, functions, triggers, CTEs | 6 | 80% | 003 to 008 applied and working: 15 functions, 3 procedures, 6 triggers, 10 views + 1 MV, 3 cron jobs | `sp_auto_close_resolved` + cron, more assertion tests | Ashvin (003–005, 008), Vismay (006) |
-| 9 | Vector Read / Update / Delete | 7 | 90% | Search, payload update, delete, sync on create/status/merge/withdraw; threshold calibrated to 0.70 (F2, seeded pairs); verified end to end | Screenshots/demo in report | Vismay |
-| 10 | Next.js interface | 3 | 95% | Every page for 3 roles, responsive, no console errors | Polish pass | Vismay |
-| 11 | Backend/API integration | 2 | 90% | Postgres data source for every method, 11 REST routes, formatted, vector code split into `lib/vector/core.ts`, `npm run test:smoke` | – | Both |
+| 9 | Vector Read / Update / Delete | 7 | 95% | Search, payload update, delete, sync on create/status/merge/withdraw; threshold calibrated to 0.70; demo GIF + screenshots; Playwright covers it | Put the demo in the report | Vismay |
+| 10 | Next.js interface | 3 | 100% | Every page for 3 roles; Playwright checks no console errors and no sideways scrolling on phones; polish fixes from the browser walk-through | – | Vismay |
+| 11 | Backend/API integration | 2 | 95% | Postgres data source for every method, 11 REST routes, vector code in `lib/vector/core.ts`, `npm run test:smoke`, production build verified | – | Both |
 | 12 | Auth, 2+ roles, RBAC in DB | 4 | 95% | `civic_app` NOINHERIT login + 4 roles, least-privilege GRANTs (column-level), RLS on 9 tables, `tests/rbac.sql`, `rbac-demo.sql`, `rbac.md` | Rehearse the demo | Vismay |
-| 13 | Documentation, Git/GitHub | 2 | 85% | README, docs/ (incl. `vector-db.md`, `rbac.md`), branches, PRs | Final report, demo GIF | Both |
+| 13 | Documentation, Git/GitHub | 2 | 90% | README with screenshots and demo GIF, docs/ (`vector-db.md`, `rbac.md`, `queries.md`), branches, PRs | Final report | Both |
 | 14 | Originality, contribution, viva | 4 | 40% | Both own SQL objects now (Vismay: 006, 007, queries, Qdrant, RBAC tests) | Ashvin works from his own account via PRs; viva prep | Both |
-| | **Total** | **50** | **≈ 84%** | about 42 of 50 marks of work in place | | |
+| | **Total** | **50** | **≈ 86%** | about 43 of 50 marks of work in place | | |
 
-The app runs end to end on PostgreSQL + Qdrant as the least-privilege `civic_app` login. What is left: ER diagram v2, Ashvin's `sp_auto_close_resolved` and tests, the report and viva prep.
+The app runs end to end on PostgreSQL + Qdrant as the least-privilege `civic_app` login, checked by SQL tests, an HTTP smoke test and Playwright. What is left: ER diagram v2, Ashvin's `sp_auto_close_resolved` and tests, `CONTRIBUTIONS.md`, `demo-script.md`, the report and viva prep.
 
 ## Foundation (done)
 
@@ -44,9 +44,12 @@ Frontend
 - [x] Report wizard with live duplicate suggestions; citizen, staff and admin portals
 - [x] DB Lab and Vector console pages
 - [x] Maps fixed (plain Leaflet), mobile table layout
-- [ ] Polish pass (`/impeccable audit`, `/impeccable polish`), keyboard and mobile check
-- [ ] Playwright e2e for the three role journeys
-- [ ] Screenshots and demo GIF for the README
+- [x] Polish pass from a real-browser walk-through: citizen "Confirm it's fixed" shown too early, SLA label overflow, admin list paginated (800 KB → 25 rows a page), interval display in DB Lab
+- [x] Phone check: Playwright fails any page that scrolls sideways on a Pixel 7 viewport
+- [x] Playwright e2e for the three role journeys (`npm run test:e2e`, 10 tests, installed Chrome)
+- [x] Screenshots and demo GIF for the README (`npm run screenshots`, `docs/screenshots/make_gif.py`)
+- [x] `docs/database/queries.md` with real outputs (`npm run docs:queries`)
+- [x] Ward admins limited to their own ward's users (RLS on `app_user`, `user_phone`, `user_session`)
 
 Database
 
@@ -82,7 +85,8 @@ Database
 ## Together
 
 - [ ] Freeze schema v2 (read `database/schema-v2.md` together)
-- [ ] Integration day: `DATA_SOURCE=postgres`, walk every page as all 3 roles
-- [ ] `docs/database/queries.md` with query outputs, `CONTRIBUTIONS.md`, `demo-script.md`
+- [x] Integration: every page walked as all 3 roles on Postgres (Playwright + `test:smoke`, production build)
+- [x] `docs/database/queries.md` with query outputs
+- [ ] `CONTRIBUTIONS.md`, `demo-script.md`
 - [ ] Final report PDF
 - [ ] Viva prep: each person explains every SQL object, not just their own
