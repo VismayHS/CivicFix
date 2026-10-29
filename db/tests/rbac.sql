@@ -47,7 +47,9 @@ SELECT (SELECT count(*) FROM complaint) AS all_complaints,
        (SELECT min(complaint_id) FROM complaint WHERE filed_by <> 33 AND status IN ('ASSIGNED','IN_PROGRESS')) AS other_open_complaint,
        (SELECT min(complaint_id) FROM complaint WHERE assigned_to = 12 AND status = 'ASSIGNED') AS ravi_assigned,
        (SELECT min(complaint_id) FROM complaint WHERE department_id <> 1 AND status = 'ASSIGNED') AS other_dept_complaint,
-       (SELECT min(complaint_id) FROM complaint WHERE ward_id = 1 AND status = 'IN_PROGRESS') AS ward1_in_progress;
+       (SELECT min(complaint_id) FROM complaint WHERE ward_id = 1 AND status = 'IN_PROGRESS') AS ward1_in_progress,
+       (SELECT count(*) FROM app_user) AS all_users,
+       (SELECT min(user_id) FROM app_user WHERE role = 'STAFF' AND ward_id = 3) AS ward3_staff;
 GRANT SELECT ON expected TO civic_app, civic_anon, civic_citizen, civic_staff, civic_admin;
 
 \echo '--- civic_app: the login role has no rights until it switches role'
@@ -101,6 +103,9 @@ SELECT rbac_test.ok('citizen files a complaint and it is auto-assigned',
   (SELECT status = 'ASSIGNED' AND assigned_to IS NOT NULL FROM complaint WHERE complaint_id = (SELECT complaint_id FROM filed)));
 SELECT rbac_test.ok('filing wrote two history rows',
   (SELECT count(*) FROM status_history WHERE complaint_id = (SELECT complaint_id FROM filed)) = 2);
+SELECT rbac_test.ok('auto-assignment is recorded as the system, not the citizen',
+  (SELECT changed_by IS NULL AND remarks LIKE 'Auto-assigned to %' FROM status_history
+    WHERE complaint_id = (SELECT complaint_id FROM filed) AND history_no = 2));
 SELECT rbac_test.denied('citizen files for someone else',
   $q$INSERT INTO complaint(title,description,category_id,department_id,ward_id,filed_by) VALUES ('Spoofed filer','x',1,1,1,34)$q$);
 SELECT rbac_test.denied('citizen sets status directly', format('UPDATE complaint SET status = %L WHERE complaint_id = %s', 'CLOSED', (SELECT complaint_id FROM filed)));
@@ -151,6 +156,15 @@ SELECT set_config('app.user_id', '2', true), set_config('app.role', 'ADMIN', tru
 SELECT rbac_test.ok('ward admin sees exactly ward 1',
   (SELECT count(*) FROM complaint) = (SELECT ward1_complaints FROM expected) AND NOT EXISTS (SELECT 1 FROM complaint WHERE ward_id <> 1));
 SELECT rbac_test.ok('ward admin views respect RLS too', NOT EXISTS (SELECT 1 FROM vw_complaint_full_detail v WHERE v.ward_name <> (SELECT ward_name FROM ward WHERE ward_id = 1)));
+SELECT rbac_test.ok('ward admin sees no staff or admins from other wards',
+  NOT EXISTS (SELECT 1 FROM app_user WHERE role <> 'CITIZEN' AND ward_id IS NOT NULL AND ward_id <> 1));
+SELECT rbac_test.ok('ward admin still sees citizens and city-wide users',
+  EXISTS (SELECT 1 FROM app_user WHERE role = 'CITIZEN') AND EXISTS (SELECT 1 FROM app_user WHERE ward_id IS NULL AND role = 'ADMIN'));
+-- RLS filters silently: the UPDATE runs but matches no row.
+WITH u AS (UPDATE app_user SET is_active = false WHERE user_id = (SELECT ward3_staff FROM expected) RETURNING 1)
+SELECT rbac_test.ok('ward admin cannot deactivate staff of another ward', count(*) = 0) FROM u;
+SELECT rbac_test.denied('ward admin creates staff in another ward',
+  $q$INSERT INTO app_user(name,email,password_hash,role,department_id,ward_id) VALUES ('Other ward','other.ward@civicfix.test','x','STAFF',1,3)$q$);
 RESET ROLE;
 
 \echo '--- civic_admin as commissioner (S. Narayan, user 1, whole city)'
@@ -169,7 +183,7 @@ INSERT INTO notification (user_id, complaint_id, type, message)
 VALUES (13, (SELECT ward1_in_progress FROM expected), 'ASSIGNMENT', 'Complaint reassigned to you');
 SELECT rbac_test.ok('commissioner reassigns a complaint (history + notification)',
   (SELECT assigned_to FROM complaint WHERE complaint_id = (SELECT ward1_in_progress FROM expected)) = 13);
-SELECT rbac_test.ok('commissioner reads users with email', (SELECT count(email) FROM app_user) > 0);
+SELECT rbac_test.ok('commissioner reads every user with email', (SELECT count(email) FROM app_user) = (SELECT all_users FROM expected));
 SELECT rbac_test.denied('commissioner reads password hashes', 'SELECT password_hash FROM app_user LIMIT 1');
 SELECT rbac_test.denied('commissioner deletes a complaint', 'DELETE FROM complaint WHERE complaint_id = 1');
 SELECT rbac_test.denied('commissioner edits a citizen''s description', 'UPDATE complaint SET description = ''x'' WHERE complaint_id = 1');
