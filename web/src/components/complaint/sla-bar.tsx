@@ -51,7 +51,8 @@ export function SlaBar({ complaint, size = "sm", showLabel = true, className, no
         <div aria-hidden className="absolute inset-y-0 left-[80%] w-px bg-foreground/40" />
       </div>
       {showLabel && (
-        <span className={cn("shrink-0 font-mono text-xs tabular-nums", TEXT[s.level], size === "md" && "text-sm")}>{s.label}</span>
+        // Long labels ("Merged into another report") wrap instead of spilling out of narrow cards.
+        <span className={cn("min-w-0 font-mono text-xs leading-tight tabular-nums", TEXT[s.level], size === "md" && "text-sm")}>{s.label}</span>
       )}
     </div>
   );
