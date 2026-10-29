@@ -18,11 +18,10 @@ Requires Node 22+ and Docker Desktop (with the Linux container engine running).
 git clone https://github.com/VismayHS/CivicFix.git
 cd CivicFix
 
-# 1. Start PostgreSQL, Qdrant, and the local embedding service
+# 1. Start PostgreSQL and Qdrant
 cp .env.example .env
 docker compose up -d --build
 docker compose exec db bash /civicfix/migrate.sh
-docker compose exec ollama ollama pull nomic-embed-text
 
 # 2. Start the app against the real backend
 cd web

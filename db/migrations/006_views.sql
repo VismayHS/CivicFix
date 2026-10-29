@@ -4,8 +4,8 @@ SELECT c.complaint_id,c.title,c.category_id,cat.category_name,c.department_id,d.
  c.assigned_to,assignee.name AS assigned_to_name,c.upvote_count,
  coalesce((SELECT max(e.escalation_level) FROM escalation e WHERE e.complaint_id=c.complaint_id),0) AS escalation_level,
  c.latitude,c.longitude,c.search_tsv
-FROM complaint c JOIN complaint_category cat USING(category_id)
-JOIN department d USING(department_id) JOIN ward w USING(ward_id)
+FROM complaint c JOIN complaint_category cat ON cat.category_id=c.category_id
+JOIN department d ON d.department_id=c.department_id JOIN ward w ON w.ward_id=c.ward_id
 LEFT JOIN app_user assignee ON assignee.user_id=c.assigned_to;
 
 CREATE OR REPLACE VIEW v_public_ward_stats WITH (security_invoker=true) AS
