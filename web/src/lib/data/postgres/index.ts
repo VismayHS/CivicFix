@@ -28,6 +28,7 @@ import type {
 import { DataError, type DataSource } from "../contract";
 import { LAB_QUERIES } from "../mock/lab";
 import * as core from "../../vector/core";
+import { sqlValue } from "../../sql-value";
 import { EMBEDDING_MODEL, PAYLOAD_INDEXES, type QdrantPoint } from "../../vector/core";
 
 type Row = QueryResultRow;
@@ -40,14 +41,20 @@ type QdrantResult = {
 const g = globalThis as unknown as { __civicfixPg?: Pool };
 function pool() {
   if (!process.env.DATABASE_URL) throw new DataError("DATABASE_URL is required when DATA_SOURCE=postgres.");
-  return (g.__civicfixPg ??= new Pool({
-    connectionString: process.env.DATABASE_URL,
-    max: Number(process.env.DB_POOL_MAX ?? 10),
-    idleTimeoutMillis: 30_000,
-    connectionTimeoutMillis: 5_000,
-    statement_timeout: 15_000,
-    application_name: "civicfix-web",
-  }));
+  if (!g.__civicfixPg) {
+    g.__civicfixPg = new Pool({
+      connectionString: process.env.DATABASE_URL,
+      max: Number(process.env.DB_POOL_MAX ?? 10),
+      idleTimeoutMillis: 30_000,
+      connectionTimeoutMillis: 5_000,
+      statement_timeout: 15_000,
+      application_name: "civicfix-web",
+    });
+    // An idle connection that dies (database restarted) must not crash the server;
+    // the pool drops it and opens a new one on the next request.
+    g.__civicfixPg.on("error", (e) => console.error("[civicfix] idle database connection lost:", e.message));
+  }
+  return g.__civicfixPg;
 }
 
 function dbError(error: unknown): never {
@@ -599,12 +606,16 @@ export const postgresSource: DataSource = {
     if (viewer.role !== "ADMIN") throw new DataError("Only admins can reassign complaints.", "FORBIDDEN");
     await forViewer(viewer, async (c) => {
       await c.query("SELECT set_config('app.status_remarks','Reassigned by municipal admin',true)");
+      // Lock the row and remember its status: only OPEN -> ASSIGNED fires the audit trigger.
+      const before = await c.query("SELECT status FROM complaint WHERE complaint_id=$1 FOR UPDATE", [id]);
+      if (!before.rowCount) throw new DataError("Complaint or eligible staff member not found.", "NOT_FOUND");
       const r = await c.query(
         "UPDATE complaint c SET assigned_to=u.user_id,department_id=u.department_id,updated_at=now(),vector_synced_at=NULL,status=CASE WHEN c.status='OPEN' THEN 'ASSIGNED' ELSE c.status END FROM app_user u WHERE c.complaint_id=$1 AND u.user_id=$2 AND u.role='STAFF' AND u.is_active RETURNING c.complaint_id,c.status",
         [id, staffId],
       );
       if (!r.rowCount) throw new DataError("Complaint or eligible staff member not found.", "NOT_FOUND");
-      if (r.rows[0].status !== "ASSIGNED")
+      // Status unchanged, so no trigger wrote history: record the reassignment here.
+      if (before.rows[0].status !== "OPEN")
         await c.query(
           "INSERT INTO status_history(complaint_id,history_no,old_status,new_status,changed_by,remarks) SELECT $1,coalesce(max(history_no),0)+1,$2,$2,$3,'Reassigned by municipal admin' FROM status_history WHERE complaint_id=$1",
           [id, r.rows[0].status, viewer.userId],
@@ -889,10 +900,7 @@ export const postgresSource: DataSource = {
       return {
         columns: r.fields.map((f) => f.name),
         rows: r.rows.map((row) =>
-          r.fields.map((f) => {
-            const v = row[f.name];
-            return v instanceof Date ? v.toISOString() : typeof v === "number" || typeof v === "string" || v === null ? v : String(v);
-          }),
+          r.fields.map((f) => sqlValue(row[f.name])),
         ),
         rowCount: r.rowCount ?? r.rows.length,
         elapsedMs: Math.round((performance.now() - start) * 100) / 100,
