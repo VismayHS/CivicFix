@@ -11,7 +11,16 @@ docker compose up -d --build  # Postgres :5432, Qdrant :6333 (dashboard: http://
 docker compose logs db        # wait for "civicfix-init: done"
 ```
 
-On the **first** start (empty volume) the container runs every file in `migrations/` in name order, then every file in `seed/`. To rebuild from scratch after changing SQL:
+On the **first** start (empty volume) the container runs every file in `migrations/` in name order, then every file in `seed/`.
+
+To apply new migrations to an existing database without deleting its data, run:
+
+```bash
+docker compose exec db bash /civicfix/migrate.sh
+```
+
+The version table skips migrations already applied. To rebuild a disposable local
+database after changing an existing migration, remove its volume and start it again:
 
 ```bash
 docker compose down -v && docker compose up -d --build
@@ -23,6 +32,12 @@ Open a SQL shell:
 docker exec -it civicfix-db psql -U postgres -d civicfix
 ```
 
+Run rollback-only smoke checks after the first startup:
+
+```bash
+docker compose exec -T db psql -v ON_ERROR_STOP=1 -U postgres -d civicfix -f /civicfix/tests/smoke.sql
+```
+
 ## Layout
 
 | Path | What | Status |
@@ -32,17 +47,30 @@ docker exec -it civicfix-db psql -U postgres -d civicfix
 | `migrations/001_schema.sql` | 15 tables, PK/FK/UNIQUE/CHECK constraints, indexes | Done, verified |
 | `migrations/002_reference_data.sql` | Departments, wards, categories, state machine, escalation policy | Done (generated) |
 | `seed/001_demo_data.sql` | 56 users, 176 complaints, history, escalations, upvotes, duplicate matches, notifications | Done (generated) |
-| `migrations/003_functions.sql` | fn_pick_assignee, fn_escalation_target, fn_sla_compliance, fn_register_citizen, fn_authenticate | **To do** |
-| `migrations/004_procedures.sql` | sp_change_status, sp_escalate_overdue, sp_confirm_duplicate | **To do** |
-| `migrations/005_triggers.sql` | complaint before/after insert, status validation + history, upvote counter, escalation notify | **To do** |
-| `migrations/006_views.sql` | Lab 4 views updated for v2 + `mv_public_ward_stats` | **To do** |
-| `migrations/007_rbac_rls.sql` | Roles, GRANTs, Row-Level Security policies | **To do** |
-| `migrations/008_cron.sql` | `CREATE EXTENSION pg_cron` + scheduled jobs | **To do** |
+| `migrations/003_functions.sql` | Auth, sessions, access, assignment, escalation and SLA helpers | Implemented |
+| `migrations/004_procedures.sql` | Status changes, SLA sweep, duplicate confirmation | Implemented |
+| `migrations/005_triggers.sql` | SLA setup, assignment, status history, notifications, upvote counter | Implemented |
+| `migrations/006_views.sql` | Complaint summary and public/admin aggregates | Implemented |
+| `migrations/007_rbac_rls.sql` | Role grants and row-level access policies | Implemented; review before deployment |
+| `migrations/008_cron.sql` | `pg_cron` SLA sweep, stats refresh, expired-session cleanup | Implemented |
 | `queries/*.sql` | The 14 DB Lab queries (copy SQL from `web/src/lib/data/mock/lab.ts`) | **To do** |
-| `tests/*.sql` | Assertion tests (DO blocks that RAISE on failure) | **To do** |
-| `qdrant/` | Collection setup + reindex scripts | **To do** |
+| `tests/smoke.sql` | Authentication, RLS, triggers, status change, SLA procedure smoke checks | Added; database run pending |
+| Qdrant | Collection/index creation, embeddings, search, and reindexing in the web adapter | Implemented; runtime verification pending |
 
-Verified on 25 Oct 2026: 001 + 002 + seed load cleanly on an empty volume; every constraint passes; `crypt('civicfix123', password_hash)` matches for the demo accounts; pg_cron 1.6 installs; 13 of the 14 DB Lab queries run unchanged (the 14th needs `fn_sla_compliance` from 003).
+Historical verification on 25 Oct 2026 covered only 001 + 002 + the seed. The newer migrations and smoke script have not yet been executed in this workspace because Docker/PostgreSQL are unavailable here.
+
+The local `.env` uses the Postgres administrator account for convenience. For a
+deployed app, provision a dedicated login as a member of the four group roles,
+store its password in the deployment secret manager, and use that login in
+`DATABASE_URL`:
+
+```sql
+CREATE ROLE civicfix_runtime LOGIN PASSWORD '<managed secret>';
+GRANT civic_anon, civic_citizen, civic_staff, civic_admin TO civicfix_runtime;
+```
+
+Run migrations with a separate database owner account. The web process switches
+to the least-privilege role for each request.
 
 ## Regenerating reference data and seed
 
