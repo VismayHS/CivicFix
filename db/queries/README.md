@@ -2,9 +2,13 @@
 
 **Owner: Vismay.** Rubric item 7 (nested, correlated, recursive and join queries, 4 marks) plus the CTE/window part of item 8.
 
-One file per query, named after the DB Lab id, e.g. `07-recursive-supervisor-chain.sql`. The SQL already exists in the `sql:` field of each entry in [`web/src/lib/data/mock/lab.ts`](../../web/src/lib/data/mock/lab.ts); copy it **unchanged** so the DB Lab page and these files never disagree. 13 of the 14 were run against the seeded database on 25 Oct 2026; `fn-sla-compliance` needs `fn_sla_compliance` from `003_functions.sql`.
+The `NN-<id>.sql` files are **generated** from the DB Lab catalogue in [`web/src/lib/data/mock/lab.ts`](../../web/src/lib/data/mock/lab.ts), so the page and these files never disagree. Change a query there, then run `npm run db:queries` in `web/`. All 20 were run as `civic_admin` on 29 Oct 2026.
 
-Each file starts with a header comment:
+Run one in psql: `docker cp db/queries civicfix-db:/q && docker exec civicfix-db psql -U postgres -d civicfix -f /q/09-recursive-supervisor-chain.sql`.
+
+`rbac-demo.sql` is hand-written: it runs the same `SELECT count(*) FROM complaint` as five roles, which DB Lab (one statement, always as admin) cannot do. See [docs/database/rbac.md](../../docs/database/rbac.md).
+
+Each generated file starts with a header comment:
 
 ```sql
 -- id:       recursive-supervisor-chain
@@ -13,7 +17,7 @@ Each file starts with a header comment:
 -- purpose:  Escalation path for every field staff member
 ```
 
-The postgres data source's `runLabQuery` reads these files (only from this folder) and returns columns and rows. For the report, paste each query's output into `docs/database/queries.md`.
+For the report, paste each query's output into `docs/database/queries.md`.
 
 | # | id | Concept |
 |---|---|---|
@@ -31,5 +35,11 @@ The postgres data source's `runLabQuery` reads these files (only from this folde
 | 12 | window-ward-ranking | RANK() and running SUM() OVER |
 | 13 | fn-sla-compliance | Calling a stored function |
 | 14 | fts-keyword | Full-text search with ts_rank |
+| 15 | view-full-detail | `vw_complaint_full_detail`, derived attribute `resolution_time` |
+| 16 | view-department-workload | `vw_department_workload` |
+| 17 | view-escalation-chain | `vw_escalation_chain` |
+| 18 | view-sla-breach-candidates | `vw_sla_breach_candidates` (CTE inside a view) |
+| 19 | rbac-privilege-matrix | GRANT matrix per role from `has_table_privilege` |
+| 20 | rbac-rls-policies | RLS policies from `pg_policies` |
 
-Worth adding: one query per view in `006_views.sql`, and an "RBAC demo" query that runs the same `SELECT count(*) FROM complaint` as three roles.
+Queries 15 to 20 read Postgres-only objects, so on `DATA_SOURCE=mock` DB Lab shows a message instead of a result.
