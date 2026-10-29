@@ -13,7 +13,10 @@
     "vector:reindex": "node --env-file-if-exists=.env.local --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/vector-reindex.ts",
     "vector:calibrate": "node --env-file-if-exists=.env.local --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/vector-calibrate.ts",
     "test:smoke": "node --env-file-if-exists=.env.local --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/e2e-smoke.ts",
-    "db:queries": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/export-queries.ts"
+    "db:queries": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/export-queries.ts",
+    "docs:queries": "node --env-file-if-exists=.env.local --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/export-query-outputs.ts",
+    "test:e2e": "playwright test",
+    "screenshots": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/screenshots.ts"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.3.2",
@@ -37,6 +40,7 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.1",
     "@tailwindcss/turbopack": "^4",
     "@types/leaflet": "^1.9.22",
     "@types/node": "^20",
