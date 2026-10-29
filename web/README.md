@@ -10,6 +10,11 @@ npm run lint
 npm run typecheck
 npm run build
 npm run db:export    # regenerate ../db/migrations/002_reference_data.sql and ../db/seed/001_demo_data.sql
+npm run db:queries   # regenerate ../db/queries/NN-*.sql from the DB Lab catalogue
+npm run vector:setup       # create the Qdrant collection + payload indexes
+npm run vector:reindex     # embed every complaint into Qdrant (-- --missing: unsynced only)
+npm run vector:calibrate   # duplicate-threshold table (docs/database/vector-db.md)
+npm run test:smoke         # end-to-end check against a running dev server (BASE_URL, default :3000)
 ```
 
 ## Structure
@@ -51,7 +56,8 @@ From the repository root, copy `.env.example` to `.env`, start services with
 `docker compose exec db bash /civicfix/migrate.sh`. The embedding model
 (all-MiniLM-L6-v2, about 25 MB) downloads inside Node on first use. In this directory,
 copy `.env.example` to `.env.local`, install packages, and run `npm run dev`.
-Set `DATABASE_URL` to match the root `POSTGRES_PASSWORD` if you changed its
-local default. Docker applies database migrations and demo seed on the first
+`DATABASE_URL` uses the `civic_app` login from `007_rbac_rls.sql`, not the
+Postgres superuser. After a fresh database, run `npm run vector:setup && npm run vector:reindex`
+to load Qdrant (or click Reindex in the admin Vector console). Docker applies database migrations and demo seed on the first
 volume initialization; run `docker compose exec db bash /civicfix/migrate.sh`
 after adding later migrations.
