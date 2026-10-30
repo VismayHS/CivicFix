@@ -1,12 +1,15 @@
 # SQL tests (`db/tests/`)
 
-**Owner: Ashvin** (Vismay: `rbac.sql`, `auto_close.sql`). Assertion scripts that prove the database enforces the rules on its own, with no app involved.
+**Owner: Ashvin** (Vismay: `rbac.sql`, `auto_close.sql`, `escalation.sql`).
+
+Every file works on a fresh database and on one that has been used: tests that need a complaint in a particular state put one into that state inside their own transaction (triggers off, as the seed loader does), and everything is rolled back. Assertion scripts that prove the database enforces the rules on its own, with no app involved.
 
 | File | Checks |
 |---|---|
 | `smoke.sql` | Authentication, RLS, triggers, status change, SLA procedure |
 | `rbac.sql` | 56 GRANT and RLS assertions, role by role: what each role may do and what it must be refused. Pattern worth copying: a `denied(label, sql)` helper that passes only on SQLSTATE 42501. |
 | `rls_transitions.sql` | Complaint visibility for anon, citizen, staff, ward admin and commissioner; invalid citizen, staff and admin status transitions go through `sp_change_status` and must be rejected by the state-machine trigger (SQLSTATE 23514) |
+| `escalation.sql` | 15 checks on `sp_escalate_overdue`: citizens and staff are refused; 1 h overdue gets level 1 (assignee to department head), 60 h overdue gets levels 1 to 3 in one run with each level from the previous target, a complaint inside its SLA is untouched, a rerun adds nothing, and 25 h overdue adds level 2 |
 | `auto_close.sql` | 14 checks on `sp_auto_close_resolved` (009): citizens and staff are refused, only complaints resolved over 7 days ago close, history is attributed to the system, the citizen is notified, the row is flagged for a Qdrant resync, session settings are restored, and the nightly pg_cron job exists |
 
 For the app as a whole, `npm run test:smoke` in `web/` drives every page and the main flows over HTTP.

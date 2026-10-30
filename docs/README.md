@@ -15,6 +15,8 @@
 | [database/queries.md](database/queries.md) | The 20 rubric queries with their real outputs (generated) |
 | [screenshots/](screenshots/) | App screenshots and the duplicate-detection demo GIF (generated) |
 | [design/DESIGN.md](design/DESIGN.md) | Design system: tokens, type, the SLA clock, motion rules, UI toolkit |
-| [diagrams/](diagrams/) | Lab 4 ER and relational diagrams; `relational-schema-v2.svg/.png` (generated from the live database by `relational_schema_v2.py`) |
+| [diagrams/](diagrams/) | Lab 4 ER and relational diagrams; `er-diagram-v2.svg/.png` (Chen, by `er_diagram_v2.py`) and `relational-schema-v2.svg/.png` (from the live database, by `relational_schema_v2.py`) |
+| [demo-script.md](demo-script.md) | The 12-minute evaluation demo, step by step, in rubric order |
+| [viva-guide.md](viva-guide.md) | Every SQL object explained, plus likely viva questions |
 
-Still to write (see [team-workflow.md](team-workflow.md)): ER diagram v2, `CONTRIBUTIONS.md`, `demo-script.md`, the final report PDF.
+Who built what: [CONTRIBUTIONS.md](../CONTRIBUTIONS.md). Still open: a final report, if the course asks for one.
