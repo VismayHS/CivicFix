@@ -1,5 +1,7 @@
 -- Close resolved complaints after the seven-day citizen review window.
-CREATE OR REPLACE PROCEDURE sp_auto_close_resolved()
+-- p_closed reports how many were closed (pg_cron calls it with no argument).
+DROP PROCEDURE IF EXISTS sp_auto_close_resolved();
+CREATE OR REPLACE PROCEDURE sp_auto_close_resolved(INOUT p_closed integer DEFAULT 0)
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
@@ -11,6 +13,7 @@ DECLARE
   v_prev_actor text := current_setting('app.status_actor', true);
   v_prev_remarks text := current_setting('app.status_remarks', true);
 BEGIN
+  p_closed := 0;
   IF coalesce(nullif(current_setting('app.role', true), ''), 'SYSTEM') NOT IN ('ADMIN', 'SYSTEM') THEN
     RAISE EXCEPTION 'Access denied' USING ERRCODE = '42501';
   END IF;
@@ -29,10 +32,11 @@ BEGIN
     PERFORM set_config('app.status_remarks', 'Closed automatically after 7 days', true);
 
     UPDATE complaint
-    SET status = 'CLOSED'
+    SET status = 'CLOSED', updated_at = now()
     WHERE complaint_id = v_complaint.complaint_id
       AND status = 'RESOLVED'
       AND resolved_at < now() - interval '7 days';
+    IF FOUND THEN p_closed := p_closed + 1; END IF;
   END LOOP;
 
   PERFORM set_config('app.role', coalesce(v_prev_role, ''), true);
@@ -42,8 +46,8 @@ BEGIN
 END
 $$;
 
-REVOKE ALL ON PROCEDURE sp_auto_close_resolved() FROM PUBLIC;
-GRANT EXECUTE ON PROCEDURE sp_auto_close_resolved() TO civic_admin;
+REVOKE ALL ON PROCEDURE sp_auto_close_resolved(integer) FROM PUBLIC;
+GRANT EXECUTE ON PROCEDURE sp_auto_close_resolved(integer) TO civic_admin;
 
 -- pg_cron uses the database role that installed the job (postgres in Docker).
 DO $$
