@@ -18,12 +18,14 @@ test.describe("admin journey", () => {
     await expect(page.getByText("Reassigned by municipal admin").first()).toBeVisible(); // history row, allowed by RLS
   });
 
-  test("SLA sweep, DB Lab and Vector console work on real data", async ({ page, consoleErrors: _ }) => {
+  test("SLA sweep, auto-close, DB Lab and Vector console work on real data", async ({ page, consoleErrors: _ }) => {
     await signIn(page, ACCOUNTS.admin);
 
     await page.goto("/admin/escalations");
     await page.getByRole("button", { name: /Run SLA sweep now/ }).click();
     await expect(page.getByText(/Sweep (escalated|finished)/)).toBeVisible();
+    await page.getByRole("button", { name: /Run auto-close/ }).click();
+    await expect(page.getByText(/Closed \d+ complaints? resolved|Nothing to close/)).toBeVisible();
 
     await page.goto("/admin/db-lab");
     await page.getByRole("button", { name: /RBAC: privilege matrix/ }).click();

@@ -7,7 +7,7 @@
  * Signs in as each role through the REST API, loads every page for that
  * role, and walks the main flows: file a complaint (auto-assignment +
  * duplicate detection in Qdrant), upvote, staff merges the duplicate,
- * admin runs the SLA sweep. It FILES ONE REAL COMPLAINT each run; reset
+ * admin runs the SLA sweep and the auto-close. It FILES ONE REAL COMPLAINT each run; reset
  * with `docker compose down -v && docker compose up -d` if that matters.
  */
 export {};
@@ -135,6 +135,7 @@ if (match) {
   check("Qdrant payload updated after the merge", point.result?.payload?.is_open === false, `${point.result?.payload?.status}`);
 }
 check("staff cannot run the SLA sweep", (await api(staff, "/escalations/sweep", {})).status === 403);
+check("staff cannot run the auto-close", (await api(staff, "/complaints/auto-close", {})).status === 403);
 
 // ----------------------------------------------------------------- admin
 const admin = await login("commissioner@civicfix.test");
@@ -150,6 +151,28 @@ await pages("admin", admin, [
 ]);
 const sweep = await api<{ data: { escalated: number } }>(admin, "/escalations/sweep", {});
 check("admin runs the SLA sweep (sp_escalate_overdue)", sweep.status === 200, `escalated ${sweep.json?.data?.escalated}`);
+const close1 = await api<{ data: { closed: number } }>(admin, "/complaints/auto-close", {});
+const close2 = await api<{ data: { closed: number } }>(admin, "/complaints/auto-close", {});
+check(
+  "admin runs the auto-close (sp_auto_close_resolved), a rerun finds nothing",
+  close1.status === 200 && close2.status === 200 && close2.json?.data?.closed === 0,
+  `closed ${close1.json?.data?.closed}, then ${close2.json?.data?.closed}`,
+);
+const stale = await fetch(`${QDRANT}/collections/complaints/points/scroll`, {
+  method: "POST",
+  headers: { "content-type": "application/json" },
+  body: JSON.stringify({ limit: 1000, with_payload: ["status"], filter: { must: [{ key: "status", match: { value: "RESOLVED" } }] } }),
+}).then((r) => r.json() as Promise<{ result?: { points: { id: number }[] } }>);
+const stillResolved = new Set<number>();
+for (const p of stale.result?.points ?? []) {
+  const d = await api<Detail>(admin, `/complaints/${p.id}`);
+  if (d.json?.data?.complaint.status === "RESOLVED") stillResolved.add(p.id);
+}
+check(
+  "Qdrant payloads resynced after the auto-close",
+  (stale.result?.points ?? []).every((p) => stillResolved.has(p.id)),
+  `${stale.result?.points.length ?? 0} RESOLVED in Qdrant, ${stillResolved.size} RESOLVED in Postgres`,
+);
 
 console.log(failures ? `\n${failures} check(s) failed.` : "\nAll checks passed.");
 process.exit(failures ? 1 : 0);

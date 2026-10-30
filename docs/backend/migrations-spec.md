@@ -105,7 +105,7 @@ Rejecting a match is a plain `UPDATE duplicate_match SET review_status = 'REJECT
 
 ### `sp_escalate_overdue(INOUT p_escalated int DEFAULT 0)`
 
-Called every 5 minutes by pg_cron and by the admin "Run SLA sweep now" button. **Definer** (the sweep must see every ward) and it sets `app.role = 'SYSTEM'` for its own updates, because ADMIN → ESCALATED is not a legal transition for a person.
+Called every 15 minutes by pg_cron and by the admin "Run SLA sweep now" button. **Definer** (the sweep must see every ward) and it sets `app.role = 'SYSTEM'` for its own updates, because ADMIN → ESCALATED is not a legal transition for a person.
 
 Rules:
 
@@ -304,5 +304,7 @@ SELECT cron.schedule('refresh-public-stats', '*/10 * * * *', 'REFRESH MATERIALIZ
 SELECT cron.schedule('purge-sessions',       '0 * * * *',    'DELETE FROM user_session WHERE expires_at < now()');
 SELECT cron.schedule('auto-close-resolved',  '30 2 * * *',   'CALL sp_auto_close_resolved()');
 ```
+
+As built (`008_cron.sql`, `009_auto_close_resolved.sql`): `civicfix-sla-sweep` every 15 minutes, `civicfix-refresh-public-stats` every 30 minutes, `civicfix-expired-session-cleanup` hourly at :17, `civicfix-auto-close-resolved` at 02:30.
 
 **Acceptance checks:** `SELECT jobname, schedule FROM cron.job;` shows 4 jobs. After 5 minutes, `SELECT jobid, status, return_message FROM cron.job_run_details ORDER BY start_time DESC LIMIT 5;` shows `succeeded`.
