@@ -12,7 +12,10 @@ SELECT
   (SELECT count(*) FROM complaint) AS city_count,
   (SELECT min(complaint_id) FROM complaint WHERE filed_by = 33 AND status = 'ASSIGNED') AS citizen_assigned,
   (SELECT min(complaint_id) FROM complaint WHERE assigned_to = 12 AND status = 'ASSIGNED') AS staff_assigned,
-  (SELECT min(complaint_id) FROM complaint WHERE status = 'OPEN' AND ward_id = 1) AS commissioner_open,
+  -- No seeded complaint stays OPEN (the insert trigger assigns it), so the admin
+  -- cases use a skipped step (ASSIGNED to RESOLVED) and a terminal state (CLOSED).
+  (SELECT min(complaint_id) FROM complaint WHERE status = 'ASSIGNED' AND ward_id = 1) AS commissioner_assigned,
+  (SELECT min(complaint_id) FROM complaint WHERE status = 'CLOSED' AND ward_id = 1) AS commissioner_closed,
   (SELECT min(c.complaint_id) FROM complaint c
     WHERE c.department_id <> 1 AND c.assigned_to IS DISTINCT FROM 12 AND c.status <> 'DUPLICATE'
       AND NOT EXISTS (SELECT 1 FROM escalation e WHERE e.complaint_id = c.complaint_id AND e.escalated_to = 12)) AS staff_hidden,
@@ -23,7 +26,7 @@ DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM test_expectations
                  WHERE citizen_assigned IS NOT NULL AND staff_assigned IS NOT NULL
-                   AND commissioner_open IS NOT NULL AND staff_hidden IS NOT NULL AND ward_hidden IS NOT NULL) THEN
+                   AND commissioner_assigned IS NOT NULL AND commissioner_closed IS NOT NULL AND staff_hidden IS NOT NULL AND ward_hidden IS NOT NULL) THEN
     RAISE EXCEPTION 'Seed data is missing a row required by the RLS/transition checks';
   END IF;
 END
@@ -112,9 +115,12 @@ BEGIN
     RAISE EXCEPTION 'Commissioner RLS does not expose all city complaints';
   END IF;
   PERFORM pg_temp.expect_illegal_transition(
-    (SELECT commissioner_open FROM test_expectations), 'IN_PROGRESS');
+    (SELECT commissioner_assigned FROM test_expectations), 'RESOLVED');
+  PERFORM pg_temp.expect_illegal_transition(
+    (SELECT commissioner_closed FROM test_expectations), 'IN_PROGRESS');
 END
 $$;
 RESET ROLE;
 
+\echo '--- all RLS visibility and illegal-transition checks passed (rolling back)'
 ROLLBACK;
