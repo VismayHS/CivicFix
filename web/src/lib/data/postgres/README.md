@@ -29,7 +29,7 @@ The database, not this file, decides what each role may see and do: see [docs/da
 - **Errors:** `dbError()` maps Postgres SQLSTATEs to `DataError` codes (`23505` → CONFLICT, `42501` → FORBIDDEN, `P0002` → NOT_FOUND, `23514`/`22023` → INVALID). Anything else is logged and shown as a generic message.
 - **One connection runs one query at a time**, so a page's queries run in order through `inOrder([...])` instead of `Promise.all`.
 - **Names of other people** come from `vw_user_directory` (RLS hides other users' `app_user` rows from citizens and staff).
-- **Writes with side effects** go through the procedures: `CALL sp_change_status(...)`, `CALL sp_confirm_duplicate(...)`, `CALL sp_escalate_overdue()`, `fn_toggle_upvote(...)`. The triggers in 005 do the history, notifications and assignment.
+- **Writes with side effects** go through the procedures: `CALL sp_change_status(...)`, `CALL sp_confirm_duplicate(...)`, `CALL sp_escalate_overdue()`, `CALL sp_auto_close_resolved(NULL)`, `fn_toggle_upvote(...)`. The triggers in 005 do the history, notifications and assignment.
 - **Sessions:** the cookie holds a random token; only its SHA-256 is stored, via `fn_create_session` / `fn_get_session` / `fn_delete_session`.
 
 ## Vector sync

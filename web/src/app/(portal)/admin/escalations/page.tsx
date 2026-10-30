@@ -13,9 +13,14 @@ import { data } from "@/lib/data";
 import { formatShortDateTime, slaState } from "@/lib/format";
 import type { Escalation } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { SweepButton } from "./sweep-button";
+import { AutoCloseButton, SweepButton } from "./sweep-button";
 
 export const metadata: Metadata = { title: "Escalations" };
+
+// Same rule as sp_auto_close_resolved: resolved more than 7 days ago
+function pastReviewWindow(c: { resolvedAt: string | null }) {
+  return c.resolvedAt !== null && new Date(c.resolvedAt).getTime() < Date.now() - 7 * 24 * 3_600_000;
+}
 
 export default function EscalationsPage() {
   return (
@@ -27,8 +32,13 @@ export default function EscalationsPage() {
 
 async function Body() {
   const user = await requireUser("ADMIN");
-  const [escalations, complaints] = await Promise.all([data.listEscalations(user), data.listComplaints(user, { status: "ACTIVE" })]);
+  const [escalations, complaints, resolved] = await Promise.all([
+    data.listEscalations(user),
+    data.listComplaints(user, { status: "ACTIVE" }),
+    data.listComplaints(user, { status: "RESOLVED" }),
+  ]);
   const awaitingSweep = complaints.filter((c) => OPEN_STATES.includes(c.status) && slaState(c).level === "breached" && c.escalationLevel === 0).length;
+  const dueToClose = resolved.filter(pastReviewWindow).length;
 
   // Group rows into one chain per complaint
   const chains = new Map<number, Escalation[]>();
@@ -40,8 +50,13 @@ async function Body() {
     <div className="space-y-8">
       <PageHeader
         title="Escalations"
-        description="When a complaint passes its deadline, the SLA sweep (sp_escalate_overdue, run by pg_cron every 5 minutes) escalates it: department head at breach, ward administrator after 24 h, commissioner after 48 h."
-        actions={<SweepButton awaiting={awaitingSweep} />}
+        description="When a complaint passes its deadline, the SLA sweep (sp_escalate_overdue, run by pg_cron every 15 minutes) escalates it: department head at breach, ward administrator after 24 h, commissioner after 48 h. A complaint left resolved for 7 days without the citizen confirming or reopening it is closed by sp_auto_close_resolved, nightly at 02:30."
+        actions={
+          <>
+            <AutoCloseButton due={dueToClose} />
+            <SweepButton awaiting={awaitingSweep} />
+          </>
+        }
       />
       <StatStrip
         stats={[
