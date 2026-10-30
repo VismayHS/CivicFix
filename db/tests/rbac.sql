@@ -38,6 +38,21 @@ END $$;
 GRANT USAGE ON SCHEMA rbac_test TO civic_app, civic_anon, civic_citizen, civic_staff, civic_admin;
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA rbac_test TO civic_app, civic_anon, civic_citizen, civic_staff, civic_admin;
 
+-- Fixture states: earlier test runs and SLA sweeps move seed rows on, so put
+-- three complaints into the states the checks need (triggers off, as the seed
+-- loader does). Rolled back with everything else.
+CREATE TEMP TABLE picked (complaint_id integer, wanted text) ON COMMIT DROP;
+INSERT INTO picked SELECT min(complaint_id), 'ASSIGNED' FROM complaint
+ WHERE assigned_to = 12 AND filed_by <> 33 AND status <> 'DUPLICATE';
+INSERT INTO picked SELECT min(complaint_id), 'ASSIGNED' FROM complaint
+ WHERE department_id <> 1 AND assigned_to IS NOT NULL AND filed_by <> 33 AND status <> 'DUPLICATE';
+INSERT INTO picked SELECT min(complaint_id), 'IN_PROGRESS' FROM complaint
+ WHERE ward_id = 1 AND department_id <> 1 AND assigned_to IS NOT NULL AND status <> 'DUPLICATE'
+   AND complaint_id NOT IN (SELECT complaint_id FROM picked);
+SET LOCAL session_replication_role = replica;
+UPDATE complaint c SET status = p.wanted, resolved_at = NULL FROM picked p WHERE p.complaint_id = c.complaint_id;
+SET LOCAL session_replication_role = origin;
+
 -- Reference numbers, read as postgres (bypasses RLS) before switching role.
 CREATE TEMP TABLE expected ON COMMIT DROP AS
 SELECT (SELECT count(*) FROM complaint) AS all_complaints,
