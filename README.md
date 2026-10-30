@@ -37,6 +37,8 @@ The app connects as `civic_app`, a login role with no rights of its own that swi
 ```bash
 docker compose exec -T db psql -U postgres -d civicfix -f /civicfix/tests/smoke.sql   # workflow checks
 docker compose exec -T db psql -U postgres -d civicfix -f /civicfix/tests/rbac.sql    # 56 GRANT/RLS checks
+docker compose exec -T db psql -U postgres -d civicfix -f /civicfix/tests/rls_transitions.sql  # visibility + illegal transitions
+docker compose exec -T db psql -U postgres -d civicfix -f /civicfix/tests/auto_close.sql       # 14 auto-close checks
 cd web
 npm run test:smoke   # every page for every role + main flows, over HTTP (app running)
 npm run test:e2e     # the three role journeys in Chrome (Playwright)
@@ -71,7 +73,7 @@ All screenshots: [docs/screenshots/](docs/screenshots/) (regenerate with `npm ru
 - **Public:** landing page, city dashboard (map, SLA by department, ward table), keyword search, complaint tracking by reference.
 - **Citizen:** 3-step report wizard with live duplicate suggestions ("upvote this instead"), my complaints with SLA clocks, confirm or reopen, notifications.
 - **Staff:** work queue sorted by time left, status changes limited to legal transitions, similar complaints, duplicate review (merge or keep separate).
-- **Admin:** analytics (filed vs resolved, SLA by department, ward ranking, escalation funnel), all complaints with reassignment, escalation chains with "Run SLA sweep now", users and roles, **DB Lab** (the rubric query catalogue, runnable), **Vector console** (Qdrant read, update, delete).
+- **Admin:** analytics (filed vs resolved, SLA by department, ward ranking, escalation funnel), all complaints with reassignment, escalation chains with "Run SLA sweep now" and "Run auto-close", users and roles, **DB Lab** (the rubric query catalogue, runnable), **Vector console** (Qdrant read, update, delete).
 
 ## Repository layout
 
@@ -85,9 +87,10 @@ CivicFix/
 ├─ db/                    PostgreSQL + Qdrant
 │  ├─ migrations/         001 schema · 002 reference data · 003 functions · 004 procedures
 │  │                      005 triggers · 006 views · 007 roles, GRANTs, RLS · 008 pg_cron
+│  │                      009 auto-close of resolved complaints
 │  ├─ seed/               demo data (generated from the same dataset as the mock)
 │  ├─ queries/            the 20 rubric queries (+ rbac-demo.sql)
-│  ├─ tests/              smoke.sql, rbac.sql
+│  ├─ tests/              smoke.sql, rbac.sql, rls_transitions.sql, auto_close.sql
 │  └─ qdrant/             how to run the vector scripts
 ├─ docs/                  plan, context PDFs, schema v2, API contract, design, team workflow
 └─ docker-compose.yml

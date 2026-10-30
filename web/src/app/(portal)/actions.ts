@@ -113,6 +113,11 @@ export async function runSlaSweep() {
   return attempt(() => data.runSlaSweep(viewer));
 }
 
+export async function runAutoClose() {
+  const viewer = await requireUser("ADMIN");
+  return attempt(() => data.runAutoClose(viewer));
+}
+
 const staffSchema = z.object({
   name: z.string().trim().min(2, "Enter a name.").max(100),
   email: z.string().trim().email("Enter a valid email.").max(150),

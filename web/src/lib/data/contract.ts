@@ -87,6 +87,8 @@ export interface DataSource {
   // Escalations (sp_escalate_overdue)
   listEscalations(viewer: SessionUser): Promise<Escalation[]>;
   runSlaSweep(viewer: SessionUser): Promise<{ escalated: number }>;
+  // Closes complaints left RESOLVED for over 7 days (sp_auto_close_resolved)
+  runAutoClose(viewer: SessionUser): Promise<{ closed: number }>;
 
   // Analytics
   getAdminAnalytics(viewer: SessionUser): Promise<AdminAnalytics>;

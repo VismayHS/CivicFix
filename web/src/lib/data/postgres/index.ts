@@ -665,7 +665,9 @@ export const postgresSource: DataSource = {
     if (!ps.length) return [];
     return anon(async (c) => {
       const ids = ps.map((p) => Number(p.payload?.complaint_id ?? p.id));
-      const rs = await c.query(`${summarySelect} WHERE complaint_id=ANY($1::int[])`, [ids]);
+      // Postgres has the live status: pg_cron (SLA sweep, auto-close) changes rows without
+      // touching Qdrant, so a payload can still say is_open until the next reindex.
+      const rs = await c.query(`${summarySelect} WHERE complaint_id=ANY($1::int[]) AND status=ANY($2::text[])`, [ids, OPEN_STATES]);
       return rs.rows.map(
         (r) =>
           ({
@@ -780,6 +782,14 @@ export const postgresSource: DataSource = {
       const after = await c.query("SELECT count(*) n FROM escalation WHERE escalated_at>now()-interval '2 seconds'");
       return { escalated: Math.max(0, Number(after.rows[0].n) - Number(r.rows[0].n)) };
     });
+  },
+  async runAutoClose(viewer) {
+    if (viewer.role !== "ADMIN") throw new DataError("Only admins can run the auto-close.", "FORBIDDEN");
+    const r = await forViewer(viewer, (c) => c.query("CALL sp_auto_close_resolved(NULL)"));
+    const closed = Number(r.rows[0]?.p_closed ?? 0);
+    // The procedure flags each closed row for resync; push the new status to Qdrant now.
+    if (closed) await this.reindexVectors().catch(() => undefined);
+    return { closed };
   },
 
   async getAdminAnalytics(viewer) {

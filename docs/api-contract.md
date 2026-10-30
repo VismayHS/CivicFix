@@ -45,6 +45,7 @@ const detail = await data.getComplaint(viewer, 42);
 | `listDuplicateMatches`, `reviewDuplicate` | `/staff/duplicates` | `duplicate_match`; `CALL sp_confirm_duplicate(...)` |
 | `listNotifications`, `unreadNotificationCount`, `markNotificationsRead` | Bell, `/notifications` | `notification` (RLS: own rows) |
 | `listEscalations`, `runSlaSweep` | `/admin/escalations` | escalation + `CALL sp_escalate_overdue()` (same as the pg_cron job) |
+| `runAutoClose` | `/admin/escalations` | `CALL sp_auto_close_resolved(NULL)` (same as the nightly pg_cron job), then a Qdrant resync of the closed rows |
 | `getAdminAnalytics` | `/admin` | CTEs + window functions (`RANK() OVER`), recursive date series |
 | `listUsers`, `createStaffUser`, `setUserActive` | `/admin/users` | app_user (+ user_phone) |
 | `listLabQueries`, `runLabQuery` | `/admin/db-lab` | The catalogue in `db/queries/*.sql`; return columns + rows |
@@ -68,6 +69,7 @@ Server Actions cover the UI. These JSON Route Handlers call the same `data` adap
 | POST | `/api/v1/duplicates/check` | `findDuplicateCandidates` |
 | POST | `/api/v1/duplicates/:cid/:mid/review` | `reviewDuplicate` |
 | POST | `/api/v1/escalations/sweep` | `runSlaSweep` |
+| POST | `/api/v1/complaints/auto-close` | `runAutoClose` |
 | GET | `/api/v1/stats/public` | `getPublicStats` |
 
 Changing `contract.ts` or `types.ts` needs both of you to approve the PR.
