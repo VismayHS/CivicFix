@@ -15,7 +15,7 @@ Last updated: 29 Oct 2026 (Vismay's database, RBAC and vector work merged). Tick
 | 5 | Technology justification | 1 | 100% | `database/technology-justification.md` | – | – |
 | 6 | DML operations | 4 | 85% | Every write flow runs on Postgres (file, status, assign, upvote, withdraw, duplicate review, users) | DML examples in the report | Ashvin |
 | 7 | Nested / correlated / recursive / joins | 4 | 100% | 20 queries in DB Lab and `db/queries/*.sql`; real outputs in `docs/database/queries.md` (`npm run docs:queries`) | Paste into the report | Vismay |
-| 8 | Procedures, functions, triggers, CTEs | 6 | 80% | 003 to 008 applied and working: 15 functions, 3 procedures, 6 triggers, 10 views + 1 MV, 3 cron jobs | `sp_auto_close_resolved` + cron, more assertion tests | Ashvin (003–005, 008), Vismay (006) |
+| 8 | Procedures, functions, triggers, CTEs | 6 | 85% | 003 to 009 applied and working: 15 functions, 4 procedures, 6 triggers, 10 views + 1 MV, 4 cron jobs | More assertion tests | Ashvin (003–005, 008–009), Vismay (006) |
 | 9 | Vector Read / Update / Delete | 7 | 95% | Search, payload update, delete, sync on create/status/merge/withdraw; threshold calibrated to 0.70; demo GIF + screenshots; Playwright covers it | Put the demo in the report | Vismay |
 | 10 | Next.js interface | 3 | 100% | Every page for 3 roles; Playwright checks no console errors and no sideways scrolling on phones; polish fixes from the browser walk-through | – | Vismay |
 | 11 | Backend/API integration | 2 | 95% | Postgres data source for every method, 11 REST routes, vector code in `lib/vector/core.ts`, `npm run test:smoke`, production build verified | – | Both |
@@ -24,7 +24,7 @@ Last updated: 29 Oct 2026 (Vismay's database, RBAC and vector work merged). Tick
 | 14 | Originality, contribution, viva | 4 | 40% | Both own SQL objects now (Vismay: 006, 007, queries, Qdrant, RBAC tests) | Ashvin works from his own account via PRs; viva prep | Both |
 | | **Total** | **50** | **≈ 86%** | about 43 of 50 marks of work in place | | |
 
-The app runs end to end on PostgreSQL + Qdrant as the least-privilege `civic_app` login, checked by SQL tests, an HTTP smoke test and Playwright. What is left: ER diagram v2, Ashvin's `sp_auto_close_resolved` and tests, `CONTRIBUTIONS.md`, `demo-script.md`, the report and viva prep.
+The app runs end to end on PostgreSQL + Qdrant as the least-privilege `civic_app` login, checked by SQL tests, an HTTP smoke test and Playwright. What is left: ER diagram v2, additional SQL assertion tests, `CONTRIBUTIONS.md`, `demo-script.md`, the report and viva prep.
 
 ## Foundation (done)
 
@@ -74,7 +74,7 @@ Database
 - [ ] Review `001_schema.sql` and `002_reference_data.sql`
 - [x] `003_functions.sql`: auth, sessions, access checks, `fn_pick_assignee`, `fn_escalation_target`, `fn_sla_compliance`, `fn_toggle_upvote`
 - [x] `004_procedures.sql`: `sp_change_status`, `sp_confirm_duplicate`, `sp_escalate_overdue`
-- [ ] `004_procedures.sql`: `sp_auto_close_resolved` + its cron job
+- [x] `009_auto_close_resolved.sql`: `sp_auto_close_resolved` + its daily cron job
 - [x] `005_triggers.sql`: insert defaults, routing, transition check, audit, upvote count, duplicate notification
 - [x] `008_cron.sql`: SLA sweep, stats refresh, session cleanup
 - [x] Postgres data source workflow: complaints, status, upvotes, notifications, escalations, duplicates
