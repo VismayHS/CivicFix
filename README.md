@@ -8,7 +8,7 @@ Citizens report potholes, garbage, leaks and broken streetlights. Each complaint
 |---|---|
 | **Team** | Vismay HS (PES1UG24AM325): frontend, views, RBAC/RLS, queries, vector DB · Ashvin Ronald Lobo (PES1UG24AM345): functions, procedures, triggers, cron, tests |
 | **Stack** | Next.js 16 · React 19 · TypeScript · Tailwind v4 · shadcn/ui · React Bits · PostgreSQL 17 + pg_cron · Qdrant |
-| **Status** | Runs end to end locally on PostgreSQL + Qdrant; verified by SQL tests, an HTTP smoke test and Playwright browser tests. Remaining: ER diagram v2, report, viva prep ([progress](docs/PROGRESS.md)) |
+| **Status** | Runs end to end locally on PostgreSQL + Qdrant; verified by SQL tests, an HTTP smoke test and Playwright browser tests. Remaining: demo and viva rehearsal ([progress](docs/PROGRESS.md), [contributions](CONTRIBUTIONS.md)) |
 
 ## Run it locally
 
@@ -39,6 +39,7 @@ docker compose exec -T db psql -U postgres -d civicfix -f /civicfix/tests/smoke.
 docker compose exec -T db psql -U postgres -d civicfix -f /civicfix/tests/rbac.sql    # 56 GRANT/RLS checks
 docker compose exec -T db psql -U postgres -d civicfix -f /civicfix/tests/rls_transitions.sql  # visibility + illegal transitions
 docker compose exec -T db psql -U postgres -d civicfix -f /civicfix/tests/auto_close.sql       # 14 auto-close checks
+docker compose exec -T db psql -U postgres -d civicfix -f /civicfix/tests/escalation.sql       # 15 escalation-level checks
 cd web
 npm run test:smoke   # every page for every role + main flows, over HTTP (app running)
 npm run test:e2e     # the three role journeys in Chrome (Playwright)
@@ -90,7 +91,7 @@ CivicFix/
 │  │                      009 auto-close of resolved complaints
 │  ├─ seed/               demo data (generated from the same dataset as the mock)
 │  ├─ queries/            the 20 rubric queries (+ rbac-demo.sql)
-│  ├─ tests/              smoke.sql, rbac.sql, rls_transitions.sql, auto_close.sql
+│  ├─ tests/              smoke.sql, rbac.sql, rls_transitions.sql, auto_close.sql, escalation.sql
 │  └─ qdrant/             how to run the vector scripts
 ├─ docs/                  plan, context PDFs, schema v2, API contract, design, team workflow
 └─ docker-compose.yml
@@ -98,16 +99,16 @@ CivicFix/
 
 ## Documentation
 
-Start with [docs/README.md](docs/README.md). Progress: [docs/PROGRESS.md](docs/PROGRESS.md). Database work: [docs/backend/](docs/backend/README.md). Key pages: [RBAC](docs/database/rbac.md), [vector DB and threshold calibration](docs/database/vector-db.md), [queries with outputs](docs/database/queries.md), [team workflow and task split](docs/team-workflow.md), [API contract](docs/api-contract.md), [schema v2](docs/database/schema-v2.md), [technology justification](docs/database/technology-justification.md), [design system](docs/design/DESIGN.md), [build plan PDF](docs/plan/status-and-build-plan.pdf).
+Start with [docs/README.md](docs/README.md). Progress: [docs/PROGRESS.md](docs/PROGRESS.md). Who built what: [CONTRIBUTIONS.md](CONTRIBUTIONS.md). Evaluation: [demo script](docs/demo-script.md), [viva guide](docs/viva-guide.md). Database work: [docs/backend/](docs/backend/README.md). Key pages: [RBAC](docs/database/rbac.md), [vector DB and threshold calibration](docs/database/vector-db.md), [queries with outputs](docs/database/queries.md), [team workflow and task split](docs/team-workflow.md), [API contract](docs/api-contract.md), [schema v2](docs/database/schema-v2.md), [technology justification](docs/database/technology-justification.md), [design system](docs/design/DESIGN.md), [build plan PDF](docs/plan/status-and-build-plan.pdf).
 
 ## Rubric map
 
 | Rubric item | Where |
 |---|---|
-| ER diagram, relational schema | `docs/diagrams/` (incl. `relational-schema-v2.png`), `docs/database/schema-v2.md` |
+| ER diagram, relational schema | `docs/diagrams/er-diagram-v2.png`, `docs/diagrams/relational-schema-v2.png`, `docs/database/schema-v2.md` |
 | DDL with constraints | `db/migrations/001_schema.sql` |
 | Vector DB creation and RUD | Qdrant collection `complaints`, `/admin/vector`, duplicate detection, [vector-db.md](docs/database/vector-db.md) |
 | DML, nested / correlated / recursive queries, joins | `db/seed/`, `db/queries/`, `/admin/db-lab`, [queries.md](docs/database/queries.md) |
-| Procedures, functions, triggers, CTEs, views | `db/migrations/003`–`006`, `008` |
+| Procedures, functions, triggers, CTEs, views | `db/migrations/003`–`006`, `008`, `009`; tests in `db/tests/` |
 | Next.js interface, backend/API integration | `web/`, `web/src/lib/data/postgres`, `web/src/app/api/v1` |
 | Authentication, roles, RBAC in database | `web/src/lib/auth`, `db/migrations/007_rbac_rls.sql`, `db/tests/rbac.sql`, [rbac.md](docs/database/rbac.md) |
