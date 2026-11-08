@@ -12,6 +12,8 @@
     "vector:setup": "node --env-file-if-exists=.env.local --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/vector-setup.ts",
     "vector:reindex": "node --env-file-if-exists=.env.local --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/vector-reindex.ts",
     "vector:calibrate": "node --env-file-if-exists=.env.local --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/vector-calibrate.ts",
+    "demo:check": "node --env-file-if-exists=.env.local --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/demo-check.ts",
+    "demo:reset": "node --env-file-if-exists=.env.local --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/demo-reset.ts",
     "test:smoke": "node --env-file-if-exists=.env.local --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/e2e-smoke.ts",
     "db:queries": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/export-queries.ts",
     "docs:queries": "node --env-file-if-exists=.env.local --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/export-query-outputs.ts",

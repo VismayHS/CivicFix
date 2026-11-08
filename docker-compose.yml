@@ -19,6 +19,7 @@ services:
       - ./db/migrations:/civicfix/migrations:ro
       - ./db/seed:/civicfix/seed:ro
       - ./db/tests:/civicfix/tests:ro
+      - ./db/queries:/civicfix/queries:ro
       - ./db/docker/migrate.sh:/civicfix/migrate.sh:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d civicfix"]

@@ -1,4 +1,4 @@
-# Demo script (about 12 minutes)
+# Demo script (about 13 minutes)
 
 For the evaluation. One person drives the laptop and the other talks; swap at each **[swap]**. The order follows the rubric, so every mark item is shown at least once.
 
@@ -10,6 +10,14 @@ cd web
 npm run vector:setup && npm run vector:reindex      # 176 complaints into Qdrant
 npm run build && npx next start -p 3000             # production build: faster and steadier than dev
 ```
+
+Then run the preflight. It checks both databases, the vector index, the three logins and duplicate detection, and prints the fix for anything wrong:
+
+```bash
+npm run demo:check            # if something else owns port 3000: BASE_URL=http://localhost:3100 npm run demo:check
+```
+
+If the data is used up or anything is broken, `npm run demo:reset` rebuilds both databases (about a minute); then start the app again.
 
 Open these tabs in Chrome:
 
@@ -32,7 +40,7 @@ Every seed account uses the password `civicfix123`. The login page also has one-
   - Weak entity → composite primary key
 - **3NF argument:** SLA hours depend on the category, so they live in `complaint_category`, not in `complaint`.
 
-## 2. DDL, cron and the vector DB (2 min)
+## 2. DDL, DML, cron and the vector DB (3 min)
 
 In psql:
 
@@ -41,6 +49,13 @@ In psql:
 SELECT jobname, schedule FROM cron.job;        -- 4 pg_cron jobs
 ```
 
+- **DML (rubric item 6):** one script runs INSERT (single, multi-row, `INSERT … SELECT`), UPDATE (`UPDATE … FROM`), UPSERT and DELETE (`DELETE … USING`, cascade). It also shows the constraints refusing bad data, and it rolls back so the data is left alone:
+
+```bash
+docker exec civicfix-db psql -U postgres -d civicfix -f /civicfix/queries/dml-demo.sql
+```
+
+  Point out step 3: the insert sends no deadline and no assignee, and the triggers fill both.
 - Qdrant at http://localhost:6333/dashboard: the collection `complaints`, 384-dimensional, cosine distance, 6 payload indexes.
 - **Why both databases:** Postgres is the system of record and enforces the rules. Qdrant answers "has someone already reported this?" by meaning, not by keywords.
 

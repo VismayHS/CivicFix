@@ -99,7 +99,7 @@ CivicFix/
 
 ## Documentation
 
-Start with [docs/README.md](docs/README.md). Progress: [docs/PROGRESS.md](docs/PROGRESS.md). Who built what: [CONTRIBUTIONS.md](CONTRIBUTIONS.md). Evaluation: [demo script](docs/demo-script.md), [viva guide](docs/viva-guide.md). Database work: [docs/backend/](docs/backend/README.md). Key pages: [RBAC](docs/database/rbac.md), [vector DB and threshold calibration](docs/database/vector-db.md), [queries with outputs](docs/database/queries.md), [team workflow and task split](docs/team-workflow.md), [API contract](docs/api-contract.md), [schema v2](docs/database/schema-v2.md), [technology justification](docs/database/technology-justification.md), [design system](docs/design/DESIGN.md), [build plan PDF](docs/plan/status-and-build-plan.pdf).
+Start with [docs/README.md](docs/README.md). Progress: [docs/PROGRESS.md](docs/PROGRESS.md). Who built what: [CONTRIBUTIONS.md](CONTRIBUTIONS.md). Report: [docs/report.md](docs/report.md). Evaluation: [demo script](docs/demo-script.md), [viva guide](docs/viva-guide.md). Database work: [docs/backend/](docs/backend/README.md). Key pages: [RBAC](docs/database/rbac.md), [vector DB and threshold calibration](docs/database/vector-db.md), [queries with outputs](docs/database/queries.md), [team workflow and task split](docs/team-workflow.md), [API contract](docs/api-contract.md), [schema v2](docs/database/schema-v2.md), [technology justification](docs/database/technology-justification.md), [design system](docs/design/DESIGN.md), [build plan PDF](docs/plan/status-and-build-plan.pdf).
 
 ## Rubric map
 

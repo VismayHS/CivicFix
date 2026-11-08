@@ -16,7 +16,8 @@
 | [screenshots/](screenshots/) | App screenshots and the duplicate-detection demo GIF (generated) |
 | [design/DESIGN.md](design/DESIGN.md) | Design system: tokens, type, the SLA clock, motion rules, UI toolkit |
 | [diagrams/](diagrams/) | Lab 4 ER and relational diagrams; `er-diagram-v2.svg/.png` (Chen, by `er_diagram_v2.py`) and `relational-schema-v2.svg/.png` (from the live database, by `relational_schema_v2.py`) |
-| [demo-script.md](demo-script.md) | The 12-minute evaluation demo, step by step, in rubric order |
-| [viva-guide.md](viva-guide.md) | Every SQL object explained, plus likely viva questions |
+| [report.md](report.md) | The project report: design, mapping, DDL, DML, queries, advanced SQL, vector DB, RBAC, testing, contributions |
+| [demo-script.md](demo-script.md) | The 13-minute evaluation demo, step by step, in rubric order |
+| [viva-guide.md](viva-guide.md) | Every SQL object explained, likely viva questions, and ready answers to live-change requests |
 
 Who built what: [CONTRIBUTIONS.md](../CONTRIBUTIONS.md). Still open: a final report, if the course asks for one.

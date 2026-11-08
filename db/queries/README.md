@@ -6,6 +6,8 @@ The `NN-<id>.sql` files are **generated** from the DB Lab catalogue in [`web/src
 
 Run one in psql: `docker cp db/queries civicfix-db:/q && docker exec civicfix-db psql -U postgres -d civicfix -f /q/09-recursive-supervisor-chain.sql`.
 
+`dml-demo.sql` is hand-written too: INSERT, UPDATE, upsert and DELETE in all their forms, plus constraint violations, rolled back at the end (rubric item 6). Run it with `docker exec civicfix-db psql -U postgres -d civicfix -f /civicfix/queries/dml-demo.sql`.
+
 `rbac-demo.sql` is hand-written: it runs the same `SELECT count(*) FROM complaint` as five roles, which DB Lab (one statement, always as admin) cannot do. See [docs/database/rbac.md](../../docs/database/rbac.md).
 
 Each generated file starts with a header comment:
