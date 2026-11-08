@@ -180,6 +180,27 @@ Real outputs are in [queries.md](database/queries.md).
 | Consistency | Postgres is the truth. `vector_synced_at` marks rows already in Qdrant; `npm run vector:reindex -- --missing` repairs any gap. Suggestions are re-checked against Postgres's live status |
 | Why 0.70 | Calibrated on labelled seed pairs, maximising F2 (recall weighted). Missing a duplicate costs more than one extra suggestion |
 
+## If they ask for a live change
+
+The rubric also marks "modification". Every recipe below was run on the real database (inside a transaction that was rolled back). Run them in psql with `docker exec -it civicfix-db psql -U postgres -d civicfix`. Say what you expect before you press Enter.
+
+| They ask | Run | What to say |
+|---|---|---|
+| Add a column | `ALTER TABLE complaint ADD COLUMN reopened_count integer NOT NULL DEFAULT 0 CONSTRAINT ck_complaint_reopened CHECK (reopened_count >= 0);` | Existing rows get the default. The app roles have **column-level GRANTs**, so the app cannot touch the new column until we `GRANT` it. That is the least-privilege design working. |
+| Change an SLA | `UPDATE complaint_category SET sla_hours = 24 WHERE category_name = 'Pothole or damaged road';` | Only **new** complaints use it, because `trg_complaint_prepare` computes `sla_deadline` at insert. Old deadlines stay as promised. |
+| Change the escalation timing | `UPDATE escalation_policy SET hours_after_breach = 12 WHERE escalation_level = 2;` | The policy is data, not code. The next `sp_escalate_overdue` run uses it. |
+| Allow a new status move | `INSERT INTO status_transition VALUES ('CLOSED','REOPENED','CITIZEN');` | The state machine is a table, and the trigger reads it. No code changes. |
+| Add a category or department | `INSERT INTO department ...` then `INSERT INTO complaint_category ...` | See `db/queries/dml-demo.sql`, steps 1 and 2. Run `npm run vector:reindex -- --missing` only if complaints changed. |
+| Add a view | `CREATE VIEW v_ward_open_count AS SELECT w.ward_name, count(*) AS open_complaints FROM complaint c JOIN ward w USING (ward_id) WHERE c.status NOT IN ('RESOLVED','CLOSED','DUPLICATE') GROUP BY w.ward_name;` | Then `GRANT SELECT ON v_ward_open_count TO civic_admin;`. Roles see nothing until granted. Add `WITH (security_invoker = true)` if RLS must apply. |
+| Add an index | `CREATE INDEX idx_complaint_priority_open ON complaint (priority) WHERE status NOT IN ('RESOLVED','CLOSED','DUPLICATE');` | A partial index: smaller, and it matches the "open work" filter. Prove it with `EXPLAIN`. |
+| Add a trigger | `CREATE FUNCTION trg_block_closed_priority() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF OLD.status = 'CLOSED' AND NEW.priority IS DISTINCT FROM OLD.priority THEN RAISE EXCEPTION 'Priority of a closed complaint cannot change' USING ERRCODE = 'check_violation'; END IF; RETURN NEW; END $$;` then `CREATE TRIGGER trg_complaint_block_closed_priority BEFORE UPDATE OF priority ON complaint FOR EACH ROW EXECUTE FUNCTION trg_block_closed_priority();` | `BEFORE` so it can stop the write. `OLD` is the row before, `NEW` after. |
+| Add a cron job | `SELECT cron.schedule('demo-job', '0 * * * *', 'SELECT 1');` and remove with `SELECT cron.unschedule('demo-job');` | The five fields are minute, hour, day, month, weekday. The time zone is Asia/Kolkata (set in `docker-compose.yml`). |
+| Give a role a new right | `GRANT SELECT ON some_table TO civic_staff;` and show it in DB Lab: "RBAC: privilege matrix per database role" | The matrix reads the real catalog, so the change appears at once. |
+| A new query | Write it from the pattern in `db/queries/` (a JOIN with GROUP BY, a correlated subquery, or a recursive CTE) and run it in DB Lab | Name the concept first: "this is correlated because the inner query uses `c.department_id` from the outer row." |
+| Change the duplicate threshold | Edit `DUPLICATE_THRESHOLD` in `web/src/lib/constants.ts`, then restart the app | Lower means more suggestions and more false alarms. We chose 0.70 by maximising F2 on labelled pairs. |
+
+After any experiment, use `ROLLBACK` if you started with `BEGIN`, or reset with `docker compose down -v && docker compose up -d` (about 40 s).
+
 ## Likely questions
 
 **What happens if Qdrant is down?** The write still commits in Postgres and `vector_synced_at` stays NULL. Duplicate suggestions just don't appear, and a reindex catches up later.

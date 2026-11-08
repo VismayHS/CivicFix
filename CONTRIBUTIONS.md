@@ -7,7 +7,7 @@
 | 1 | Vismay HS | PES1UG24AM325 | `VismayHS` |
 | 2 | Ashvin Ronald Lobo | PES1UG24AM345 | `ashvinrlobo` |
 
-Every claim below can be checked in the commit history (`git log --author=…`) and in the pull requests on GitHub (#1 to #8).
+Every claim below can be checked in the commit history (`git log --author=…`) and in the pull requests on GitHub (#1 to #10).
 
 ## Who built what
 
@@ -26,6 +26,7 @@ Every claim below can be checked in the commit history (`git log --author=…`) 
 | `sp_auto_close_resolved` + nightly cron job | `009_auto_close_resolved.sql` | Ashvin | Vismay: count output, `updated_at` (PR #7) |
 | Seed data (176 complaints, 56 users, 10 wards, 7 departments, 15 categories) | `db/seed/` | Vismay | Generated from the same dataset as the mock |
 | 20 rubric queries (joins, nested, correlated, recursive CTEs, window, FTS) + RBAC demo | `db/queries/` | Vismay | |
+| `dml-demo.sql`: INSERT, UPDATE, upsert, DELETE, SAVEPOINT and constraint refusals, rolled back | `db/queries/dml-demo.sql` | Vismay | |
 
 ### SQL tests (`db/tests/`, each rolled back)
 
@@ -62,6 +63,7 @@ All by Vismay:
 | ER diagram v2 (Chen) and relational schema v2, both generated from the live schema | Vismay |
 | HTTP smoke test, 10 Playwright browser tests, screenshots, demo GIF | Vismay |
 | README, `docs/` (schema, RBAC, vector DB, queries with real outputs, API contract) | Vismay |
+| `docs/report.md`, `demo-check` and `demo-reset` scripts | Vismay |
 | `db/README.md` and `db/tests/README.md` | Both |
 
 ## How we worked
