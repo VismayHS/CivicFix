@@ -638,6 +638,18 @@ export const mockSource: DataSource = {
     return { escalated: new Set(due.map((x) => x.c.complaintId)).size };
   },
 
+  async runAutoClose(viewer) {
+    requireRole(viewer, "ADMIN");
+    const d = await live();
+    // sp_auto_close_resolved: the citizen had 7 days to confirm or reopen
+    const due = d.complaints.filter((c) => c.status === "RESOLVED" && c.resolvedAt !== null && c.resolvedAt < Date.now() - 7 * 24 * H);
+    for (const c of due) {
+      pushHistory(d, c, "CLOSED", null, "Closed automatically after 7 days");
+      notify(d, c.filedBy, c.complaintId, "STATUS_UPDATE", `${c.title} is now closed`);
+    }
+    return { closed: due.length };
+  },
+
   async getAdminAnalytics(viewer) {
     requireRole(viewer, "ADMIN");
     const d = await live();

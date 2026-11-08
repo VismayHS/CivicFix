@@ -14,6 +14,7 @@ import { defineConfig, devices } from "@playwright/test";
  */
 export default defineConfig({
   testDir: "./e2e",
+  globalSetup: "./e2e/warmup.ts",
   // Outside web/: the dev server watches this folder and would reload pages
   // every time a trace or screenshot is written.
   outputDir: join(tmpdir(), "civicfix-playwright"),
