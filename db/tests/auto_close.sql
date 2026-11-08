@@ -31,6 +31,19 @@ END $$;
 GRANT USAGE ON SCHEMA close_test TO civic_citizen, civic_staff, civic_admin;
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA close_test TO civic_citizen, civic_staff, civic_admin;
 
+-- Fixtures: one complaint resolved 8 days ago and one 2 days ago. Set directly
+-- (triggers off, as the seed loader does) so the test also works after the
+-- job has already run on this database. Rolled back at the end.
+CREATE TEMP TABLE picked ON COMMIT DROP AS
+SELECT complaint_id, row_number() OVER (ORDER BY complaint_id) AS n FROM complaint
+ WHERE status <> 'DUPLICATE' AND filed_by IS NOT NULL ORDER BY complaint_id LIMIT 2;
+SET LOCAL session_replication_role = replica;
+UPDATE complaint c SET status = 'RESOLVED',
+       created_at = least(c.created_at, now() - interval '10 days'),
+       resolved_at = now() - CASE p.n WHEN 1 THEN interval '8 days' ELSE interval '2 days' END
+  FROM picked p WHERE p.complaint_id = c.complaint_id;
+SET LOCAL session_replication_role = origin;
+
 -- Fixtures, read as the owner: one complaint past the window, one inside it.
 SELECT min(complaint_id) AS old_id FROM complaint
  WHERE status = 'RESOLVED' AND resolved_at < now() - interval '7 days' \gset

@@ -4,6 +4,20 @@
 \set ON_ERROR_STOP 1
 BEGIN;
 
+-- Fixture states: earlier runs and SLA sweeps move seed rows on, so make sure
+-- an ASSIGNED complaint exists for each case (triggers off, as the seed loader
+-- does). Rolled back at the end.
+CREATE TEMP TABLE picked (complaint_id integer) ON COMMIT DROP;
+INSERT INTO picked SELECT min(complaint_id) FROM complaint
+ WHERE filed_by = 33 AND assigned_to IS NOT NULL AND status <> 'DUPLICATE';
+INSERT INTO picked SELECT min(complaint_id) FROM complaint
+ WHERE assigned_to = 12 AND status <> 'DUPLICATE' AND complaint_id NOT IN (SELECT complaint_id FROM picked);
+INSERT INTO picked SELECT min(complaint_id) FROM complaint
+ WHERE ward_id = 1 AND assigned_to IS NOT NULL AND status <> 'DUPLICATE' AND complaint_id NOT IN (SELECT complaint_id FROM picked);
+SET LOCAL session_replication_role = replica;
+UPDATE complaint SET status = 'ASSIGNED', resolved_at = NULL WHERE complaint_id IN (SELECT complaint_id FROM picked);
+SET LOCAL session_replication_role = origin;
+
 -- Capture known rows and expected counts before enabling role-scoped RLS.
 CREATE TEMP TABLE test_expectations ON COMMIT DROP AS
 SELECT

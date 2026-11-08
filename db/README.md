@@ -61,10 +61,11 @@ Load Qdrant after a fresh start (from `web/`): `npm run vector:setup && npm run 
 | `tests/smoke.sql` | Authentication, RLS, triggers, status change, SLA procedure smoke checks | Passes |
 | `tests/rbac.sql` | 56 role-by-role GRANT and RLS assertions | Passes |
 | `tests/rls_transitions.sql` | Complaint visibility per role; illegal status transitions rejected by the state machine | Passes |
+| `tests/escalation.sql` | 15 checks on `sp_escalate_overdue`, level by level | Passes |
 | `tests/auto_close.sql` | 14 checks on `sp_auto_close_resolved`: who may run it, the 7-day window, history, notification, cron job | Passes |
 | Qdrant | Collection + 6 payload indexes, MiniLM embeddings in Node, `npm run vector:*` scripts ([docs](../docs/database/vector-db.md)) | Done; threshold calibrated to 0.70 |
 
-Verified on 30 Oct 2026: 001 to 009 + seed apply on an empty volume; `tests/smoke.sql`, `tests/rbac.sql`, `tests/rls_transitions.sql` and `tests/auto_close.sql` pass; all 20 DB Lab queries run as `civic_admin`; `npm run test:smoke` (every page for every role, plus filing, duplicate detection, merge and SLA sweep) passes with `DATA_SOURCE=postgres`.
+Verified on 30 Oct 2026: 001 to 009 + seed apply on an empty volume; `tests/smoke.sql`, `tests/rbac.sql`, `tests/rls_transitions.sql`, `tests/auto_close.sql` and `tests/escalation.sql` pass, on a fresh and on a used database; all 20 DB Lab queries run as `civic_admin`; `npm run test:smoke` (every page for every role, plus filing, duplicate detection, merge and SLA sweep) passes with `DATA_SOURCE=postgres`.
 
 The app connects as **`civic_app`** (created in 007, password `civicfix-app-local`, local only). It is `NOINHERIT`, so it has no rights until it runs `SET LOCAL ROLE` to one of the four group roles. Migrations and the test scripts run as `postgres`. For a deployment, change the `civic_app` password and keep it in the platform's secret store.
 
