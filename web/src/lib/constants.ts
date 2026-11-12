@@ -1,5 +1,6 @@
 import type { ComplaintStatus, NotificationType, Priority, Role } from "./types";
 
+// Labels and colours shown for each status. The set of statuses mirrors ck_complaint_status in 001_schema.sql.
 export const STATUS_LABEL: Record<ComplaintStatus, string> = {
   OPEN: "Open",
   ASSIGNED: "Assigned",
@@ -23,6 +24,8 @@ export const STATUS_TONE: Record<ComplaintStatus, "neutral" | "info" | "signal" 
   DUPLICATE: "dup",
 };
 
+// OPEN_STATES are statuses where work is still pending (used for queues, SLA checks and duplicate search);
+// DONE_STATES are finished ones. Keep in step with the status lists in the SQL (views and procedures).
 export const OPEN_STATES: ComplaintStatus[] = ["OPEN", "ASSIGNED", "IN_PROGRESS", "REOPENED", "ESCALATED"];
 export const DONE_STATES: ComplaintStatus[] = ["RESOLVED", "CLOSED", "DUPLICATE"];
 
@@ -90,12 +93,14 @@ export const STATUS_TRANSITIONS: { from: ComplaintStatus; to: ComplaintStatus; r
   { from: "ESCALATED", to: "CLOSED", role: "ADMIN" },
 ];
 
+// Mirrors the rows of escalation_policy: who is told, and how many hours after the deadline.
 export const ESCALATION_LEVELS = [
   { level: 1, label: "Department head", hoursAfterBreach: 0 },
   { level: 2, label: "Ward administrator", hoursAfterBreach: 24 },
   { level: 3, label: "Municipal commissioner", hoursAfterBreach: 48 },
 ] as const;
 
+// Every seed account uses this password (hashed with bcrypt in the database). Shown on the login page for demos only.
 export const DEMO_PASSWORD = "civicfix123";
 
 export const DEMO_ACCOUNTS = [

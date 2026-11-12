@@ -4,6 +4,7 @@
 # Credentials come from .env at the repo root (copy .env.example).
 
 services:
+  # PostgreSQL 17 with pg_cron (built from db/docker/Dockerfile).
   db:
     build: ./db/docker
     container_name: civicfix-db
@@ -11,30 +12,41 @@ services:
       POSTGRES_DB: civicfix
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-civicfix-local}
+    # Server settings: pg_cron must be preloaded; the scheduler runs in the civicfix database; and the
+    # cron timezone is Asia/Kolkata, so "02:30" means 02:30 in India.
     command: ["postgres", "-c", "shared_preload_libraries=pg_cron", "-c", "cron.database_name=civicfix", "-c", "cron.timezone=Asia/Kolkata"]
+    # 127.0.0.1 binds the port to this computer only, so the database is not reachable from other machines.
+    # The password has a local-only default; set POSTGRES_PASSWORD in .env to change it.
     ports:
       - "127.0.0.1:5432:5432"
     volumes:
+      # pgdata is a named volume: the data survives restarts and is removed only by `docker compose down -v`.
+      # The folders below are mounted read-only (:ro): migrations and seed run on first start, tests and queries
+      # are run by hand with docker exec.
       - pgdata:/var/lib/postgresql/data
       - ./db/migrations:/civicfix/migrations:ro
       - ./db/seed:/civicfix/seed:ro
       - ./db/tests:/civicfix/tests:ro
       - ./db/queries:/civicfix/queries:ro
       - ./db/docker/migrate.sh:/civicfix/migrate.sh:ro
+    # Docker marks the container healthy once Postgres accepts connections (checked every 5 s, up to 20 times).
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d civicfix"]
       interval: 5s
       timeout: 3s
       retries: 20
 
+  # Qdrant vector database (REST API on 6333, dashboard at /dashboard). Version pinned so everyone gets the same behaviour.
   qdrant:
     image: qdrant/qdrant:v1.13.4
     container_name: civicfix-qdrant
     ports:
       - "127.0.0.1:6333:6333"
     volumes:
+      # Vectors are stored in a named volume. They can always be rebuilt from Postgres with `npm run vector:reindex`.
       - qdrant:/qdrant/storage
 
+# Named volumes declared here are managed by Docker.
 volumes:
   pgdata:
   qdrant:

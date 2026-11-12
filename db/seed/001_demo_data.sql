@@ -7,7 +7,10 @@
 -- Every demo account uses the password civicfix123 (bcrypt via pgcrypto).
 -- Triggers are disabled while loading so historical rows keep their recorded
 -- timestamps and assignments instead of being re-derived.
+-- Timestamps are written as now() minus an offset, so the data always looks recent.
+-- The whole load is one transaction: it either completes or leaves nothing behind.
 BEGIN;
+-- DISABLE TRIGGER USER switches off our own triggers (not the constraint checks) for these tables.
 ALTER TABLE app_user DISABLE TRIGGER USER;
 ALTER TABLE user_phone DISABLE TRIGGER USER;
 ALTER TABLE complaint DISABLE TRIGGER USER;
@@ -16,8 +19,10 @@ ALTER TABLE escalation DISABLE TRIGGER USER;
 ALTER TABLE upvote DISABLE TRIGGER USER;
 ALTER TABLE duplicate_match DISABLE TRIGGER USER;
 ALTER TABLE notification DISABLE TRIGGER USER;
+-- One bcrypt hash of the demo password (cost 10), computed once and reused for every user.
 CREATE TEMP TABLE _demo_pw ON COMMIT DROP AS SELECT crypt('civicfix123', gen_salt('bf', 10)) AS h;
 
+-- app_user: citizens, staff, ward admins and the commissioner. supervisor_id builds the reporting chain.
 INSERT INTO app_user (user_id, name, email, password_hash, role, department_id, ward_id, supervisor_id, is_active, created_at) VALUES
   (1, 'S. Narayan', 'commissioner@civicfix.test', (SELECT h FROM _demo_pw), 'ADMIN', NULL, NULL, NULL, TRUE, now() - interval '10368000 seconds'),
   (2, 'Meera Iyer', 'meera.iyer@civicfix.test', (SELECT h FROM _demo_pw), 'ADMIN', NULL, 1, 1, TRUE, now() - interval '10364400 seconds'),
@@ -76,6 +81,7 @@ INSERT INTO app_user (user_id, name, email, password_hash, role, department_id, 
   (55, 'Shalini Verma', 'shalini.verma@civicfix.test', (SELECT h FROM _demo_pw), 'CITIZEN', NULL, NULL, NULL, TRUE, now() - interval '10173600 seconds'),
   (56, 'Tejas Rao', 'tejas.rao@civicfix.test', (SELECT h FROM _demo_pw), 'CITIZEN', NULL, NULL, NULL, TRUE, now() - interval '10170000 seconds');
 
+-- user_phone: the multivalued Phone_Number attribute of a user, one row per number.
 INSERT INTO user_phone (user_id, phone_number) VALUES
   (1, '+919845007919'),
   (2, '+919845015838'),
@@ -139,6 +145,7 @@ INSERT INTO user_phone (user_id, phone_number) VALUES
   (55, '+919845966118'),
   (56, '+919845974037');
 
+-- complaint: the central table. Keys to category, department, ward, filer and assignee; duplicate_of points at the original.
 INSERT INTO complaint (complaint_id, title, description, category_id, department_id, ward_id, status, priority, address, latitude, longitude, filed_by, assigned_to, duplicate_of, upvote_count, created_at, updated_at, sla_deadline, resolved_at) VALUES
   (1, 'Road surface caved in near 5th Block bus stop', 'The road has broken up near 5th Block bus stop, leaving a hole almost a metre wide. Vehicles hit it at night because there is no barricade or reflector.', 1, 1, 1, 'CLOSED', 'NORMAL', '5th Block bus stop, Koramangala, Bengaluru', 12.937559, 77.629931, 33, 12, NULL, 1, now() - interval '576285 seconds', now() - interval '343537 seconds', now() - interval '317085 seconds', now() - interval '465702 seconds'),
   (2, 'Broken swings in park near Varthur Road', 'Benches and lights in the park near Varthur Road are damaged and the walking track is overgrown.', 15, 7, 5, 'CLOSED', 'HIGH', 'Varthur Road, Whitefield, Bengaluru', 12.976527, 77.746881, 53, 32, NULL, 5, now() - interval '6475778 seconds', now() - interval '6132145 seconds', now() - interval '5870978 seconds', now() - interval '6229895 seconds'),
@@ -317,6 +324,7 @@ INSERT INTO complaint (complaint_id, title, description, category_id, department
   (175, 'Stray dog pack chasing vehicles at 80 Feet Road', 'A stray dog near 80 Feet Road has an injured leg and needs care. It is lying near the bus stop.', 13, 6, 1, 'DUPLICATE', 'NORMAL', '80 Feet Road, Koramangala, Bengaluru', 12.926824, 77.627502, 37, 27, 67, 0, now() - interval '591932 seconds', now() - interval '584978 seconds', now() - interval '246332 seconds', NULL),
   (176, 'Park lights and benches damaged at Jayanagar Shopping Complex', 'Benches and lights in the park near Jayanagar Shopping Complex are damaged and the walking track is overgrown.', 15, 7, 3, 'ASSIGNED', 'NORMAL', 'Jayanagar Shopping Complex, Jayanagar, Bengaluru', 12.933549, 77.590651, 42, 30, NULL, 5, now() - interval '857606 seconds', now() - interval '857366 seconds', now() - interval '252806 seconds', NULL);
 
+-- status_history: weak entity of complaint, key (complaint_id, history_no). One row per status change; changed_by NULL = system.
 INSERT INTO status_history (complaint_id, history_no, old_status, new_status, changed_by, remarks, changed_at) VALUES
   (1, 1, NULL, 'OPEN', 33, 'Complaint filed', now() - interval '576285 seconds'),
   (1, 2, 'OPEN', 'ASSIGNED', NULL, 'Auto-assigned to Ravi Kumar', now() - interval '575866 seconds'),
@@ -1102,6 +1110,7 @@ INSERT INTO status_history (complaint_id, history_no, old_status, new_status, ch
   (170, 3, 'ASSIGNED', 'ESCALATED', NULL, 'Escalated to Ramesh Chandra (level 1)', now() - interval '1117976 seconds'),
   (174, 3, 'ASSIGNED', 'ESCALATED', NULL, 'Escalated to Abdul Rahman (level 1)', now() - interval '1319611 seconds');
 
+-- escalation: weak entity of complaint, key (complaint_id, escalation_level). The chain a late complaint climbed.
 INSERT INTO escalation (complaint_id, escalation_level, escalated_from, escalated_to, reason, escalated_at, resolved_at) VALUES
   (3, 1, 20, 7, 'SLA breached by 1 h', now() - interval '472432 seconds', NULL),
   (3, 2, 7, 4, 'SLA breached by 24 h', now() - interval '386032 seconds', NULL),
@@ -1150,6 +1159,7 @@ INSERT INTO escalation (complaint_id, escalation_level, escalated_from, escalate
   (174, 2, 7, 3, 'SLA breached by 24 h', now() - interval '1233211 seconds', NULL),
   (174, 3, 3, 1, 'SLA breached by 48 h', now() - interval '1146811 seconds', NULL);
 
+-- upvote: the M:N link between a user and a complaint. complaint.upvote_count already matches these rows.
 INSERT INTO upvote (complaint_id, user_id, upvoted_at) VALUES
   (1, 45, now() - interval '445663 seconds'),
   (2, 33, now() - interval '6000271 seconds'),
@@ -1996,6 +2006,7 @@ INSERT INTO upvote (complaint_id, user_id, upvoted_at) VALUES
   (176, 46, now() - interval '575970 seconds'),
   (176, 50, now() - interval '203467 seconds');
 
+-- duplicate_match: pairs of complaints the vector search judged similar, with the score and the staff review result.
 INSERT INTO duplicate_match (complaint_id, matched_complaint_id, similarity_score, review_status, reviewed_by, detected_at, reviewed_at) VALUES
   (165, 3, 0.7852, 'CONFIRMED', 20, now() - interval '495233 seconds', now() - interval '482863 seconds'),
   (166, 4, 0.8032, 'PENDING', NULL, now() - interval '38387 seconds', NULL),
@@ -2011,6 +2022,7 @@ INSERT INTO duplicate_match (complaint_id, matched_complaint_id, similarity_scor
   (176, 71, 0.8311, 'PENDING', NULL, now() - interval '857546 seconds', NULL),
   (92, 64, 0.8061, 'PENDING', NULL, now() - interval '30988 seconds', NULL);
 
+-- notification: messages shown in each user's notification list.
 INSERT INTO notification (notification_id, user_id, complaint_id, type, message, read_status, sent_at) VALUES
   (1, 32, 2, 'ASSIGNMENT', 'New complaint assigned: Broken swings in park near Varthur Road', TRUE, now() - interval '6475423 seconds'),
   (2, 23, 101, 'ASSIGNMENT', 'New complaint assigned: Dark stretch near Kempapura, lights off', TRUE, now() - interval '6361307 seconds'),
@@ -2412,6 +2424,7 @@ INSERT INTO notification (notification_id, user_id, complaint_id, type, message,
   (397, 11, 72, 'ESCALATION', 'Level 1 escalation: Fallen tree blocking lane near Forum Mall signal', FALSE, now() - interval '5336 seconds'),
   (398, 34, 72, 'ESCALATION', 'Your complaint was escalated to level 1', FALSE, now() - interval '5336 seconds');
 
+-- Switch the triggers back on, so normal use of the database is validated again.
 ALTER TABLE app_user ENABLE TRIGGER USER;
 ALTER TABLE user_phone ENABLE TRIGGER USER;
 ALTER TABLE complaint ENABLE TRIGGER USER;
@@ -2420,6 +2433,7 @@ ALTER TABLE escalation ENABLE TRIGGER USER;
 ALTER TABLE upvote ENABLE TRIGGER USER;
 ALTER TABLE duplicate_match ENABLE TRIGGER USER;
 ALTER TABLE notification ENABLE TRIGGER USER;
+-- Move the id sequences past the highest loaded id (see 002_reference_data.sql).
 SELECT setval(pg_get_serial_sequence('app_user', 'user_id'), (SELECT max(user_id) FROM app_user));
 SELECT setval(pg_get_serial_sequence('complaint', 'complaint_id'), (SELECT max(complaint_id) FROM complaint));
 SELECT setval(pg_get_serial_sequence('notification', 'notification_id'), (SELECT max(notification_id) FROM notification));

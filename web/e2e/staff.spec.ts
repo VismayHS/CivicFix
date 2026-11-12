@@ -1,6 +1,9 @@
 import { ACCOUNTS, expect, fileViaApi, ref, signIn, stamp, test } from "./helpers";
 
+// Staff journeys: working a complaint through its life, and merging a detected duplicate.
 test.describe("staff journey", () => {
+  // Full life of one complaint: a citizen files it (REST), the assigned staff member starts work and resolves it
+  // (each button calls sp_change_status), then the citizen confirms. The state machine allows every move.
   test("assignee starts work and resolves, citizen confirms the fix", async ({ page, request, consoleErrors: _ }) => {
     const id = await fileViaApi(request, {
       title: `Streetlight test ${stamp()} on 5th Block`,

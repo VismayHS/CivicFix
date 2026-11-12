@@ -1,3 +1,18 @@
+// =====================================================================
+// The PostgreSQL + Qdrant implementation of the DataSource contract (see ../contract.ts).
+// Every page, Server Action and REST route reaches the database through this file.
+//
+// How a request reaches the database
+//   1. forViewer(viewer, fn) / anon(fn) call asRole(), which opens a transaction and runs
+//          SET LOCAL ROLE civic_<role>        (citizen, staff, admin or anon)
+//          set_config('app.user_id', ...)     (who is asking, read by the triggers and RLS policies)
+//   2. fn(client) runs SQL as that role. Row-level security and column GRANTs (007_rbac_rls.sql)
+//      decide what comes back; this file never filters rows by user itself.
+//   3. COMMIT, or ROLLBACK on error; the pooled connection goes back with the role reset.
+//
+// Qdrant is called only after the SQL transaction has committed. If Qdrant is down, the complaint is
+// still saved and vector_synced_at stays NULL, so `npm run vector:reindex -- --missing` repairs it later.
+// =====================================================================
 import "server-only";
 import { createHash, randomBytes } from "node:crypto";
 import { Pool, type PoolClient, type QueryResultRow } from "pg";
@@ -38,6 +53,8 @@ type QdrantResult = {
   points_count?: number;
   status?: string;
 };
+// One connection pool for the whole server process. Storing it on globalThis stops the dev server's hot
+// reload from creating a new pool (and leaking connections) every time a file changes.
 const g = globalThis as unknown as { __civicfixPg?: Pool };
 function pool() {
   if (!process.env.DATABASE_URL) throw new DataError("DATABASE_URL is required when DATA_SOURCE=postgres.");
@@ -57,6 +74,10 @@ function pool() {
   return g.__civicfixPg;
 }
 
+// Translate a PostgreSQL error code (SQLSTATE) into a DataError with a safe, readable message.
+// The raw database message is never shown to the user:
+//   23505 unique violation   23503 foreign-key violation   23514 CHECK or trigger refused the change
+//   22023 / 22P02 bad value   42501 permission denied (GRANT or row-level security)   P0002 not found
 function dbError(error: unknown): never {
   if (error instanceof DataError) throw error;
   const e = error as { code?: string; constraint?: string };
@@ -70,6 +91,13 @@ function dbError(error: unknown): never {
   throw new DataError("The database could not complete that request.");
 }
 
+// Run fn inside one transaction as a database role. This is the single place where the web app's
+// identity becomes the database's identity.
+//   - civic_app (the login) has no rights of its own; SET LOCAL ROLE switches to the group role for this
+//     transaction only, so a pooled connection cannot leak one user's rights to the next.
+//   - set_config(..., true) stores the user, role, department and ward as transaction-local settings.
+//     The triggers, procedures and RLS policies read them with current_setting('app.user_id') and so on.
+//   - Parameters ($1..$4) are used, so a request cannot inject SQL through these values.
 async function asRole<T>(
   role: "anon" | "citizen" | "staff" | "admin",
   viewer: SessionUser | null,
@@ -99,6 +127,7 @@ async function asRole<T>(
     c.release();
   }
 }
+// Pick the database role that matches the signed-in user's application role.
 function forViewer<T>(v: SessionUser, fn: (c: PoolClient) => Promise<T>) {
   const role = v.role === "CITIZEN" ? "citizen" : v.role === "STAFF" ? "staff" : "admin";
   return asRole(role, v, fn);
@@ -110,11 +139,14 @@ async function inOrder<T extends (() => Promise<unknown>)[]>(fns: [...T]): Promi
   for (const fn of fns) results.push(await fn());
   return results as { [K in keyof T]: Awaited<ReturnType<T[K]>> };
 }
+// Signed-out visitors use the civic_anon role: public views only.
 const anon = <T>(fn: (c: PoolClient) => Promise<T>) => asRole("anon", null, fn);
 const num = (x: unknown) => (x === null || x === undefined ? null : Number(x));
 const iso = (x: unknown) => (x == null ? null : new Date(x as string | number | Date).toISOString());
 const roleValue = (x: string): SessionUser["role"] => x as SessionUser["role"];
 
+// Row mappers: turn a database row (snake_case columns, numbers as strings, timestamps as Dates)
+// into the camelCase objects the UI expects. num() and iso() keep NULL as null.
 function summary(r: Row): ComplaintSummary {
   return {
     complaintId: Number(r.complaint_id),
@@ -138,6 +170,7 @@ function summary(r: Row): ComplaintSummary {
     longitude: num(r.longitude),
   };
 }
+// List pages read the view v_complaint_summary (006_views.sql). It runs as the caller, so RLS applies.
 const summarySelect = "SELECT * FROM v_complaint_summary";
 function complaint(r: Row): Complaint {
   return {
@@ -174,6 +207,10 @@ function userSummary(r: Row): UserSummary {
     createdAt: iso(r.created_at)!,
   };
 }
+// Build a WHERE clause from the list filters. Values are never pasted into the SQL: each one becomes a
+// numbered placeholder ($1, $2, ...) and goes in the values array (parameterised query, safe against
+// SQL injection). The search text uses PostgreSQL full-text search (search_tsv @@ websearch_to_tsquery)
+// or an exact complaint number.
 function filters(f?: ComplaintFilter, start = 1) {
   const clauses: string[] = [];
   const values: unknown[] = [];
@@ -210,6 +247,8 @@ function escalation(r: Row): Escalation {
     resolvedAt: iso(r.resolved_at),
   };
 }
+// Escalation rows with the complaint, ward, department and the people's names joined in.
+// Names come from vw_user_directory, a view that exposes only name and role.
 const escalationSelect = `SELECT e.*,c.title AS complaint_title,w.ward_name,d.department_name,uf.name AS escalated_from_name,ut.name AS escalated_to_name,ut.role AS escalated_to_role FROM escalation e JOIN complaint c USING(complaint_id) JOIN ward w USING(ward_id) JOIN department d USING(department_id) LEFT JOIN vw_user_directory uf ON uf.user_id=e.escalated_from JOIN vw_user_directory ut ON ut.user_id=e.escalated_to`;
 // Embeddings and Qdrant calls live in ../../vector/core so the CLI scripts share them.
 // Errors from there are plain Errors; wrap them so pages can show the message.
@@ -218,7 +257,11 @@ const vec = <T>(p: Promise<T>) =>
     throw e instanceof DataError ? e : new DataError(e instanceof Error ? e.message : "The vector service failed.");
   });
 const qdrant = <T = unknown>(path: string, method = "GET", body?: unknown) => vec(core.qdrant<T>(path, method, body));
+// Create or update one complaint's point in Qdrant (the collection is created first if missing).
 const upsertVector = (r: Row) => vec(core.ensureCollection().then(() => core.upsertComplaints([r as core.ComplaintRow])));
+// Bring Qdrant in line with Postgres after a change (status, assignee, merge). Reads the row as the
+// viewer, upserts the point, then records vector_synced_at through fn_mark_vector_synced. If Qdrant fails,
+// the row is marked unsynced and a later reindex catches up; the user's action is never blocked by it.
 async function syncComplaintVector(viewer: SessionUser, id: number) {
   let row: Row | null;
   try {
@@ -245,6 +288,8 @@ async function syncComplaintVector(viewer: SessionUser, id: number) {
     console.error("[civicfix] vector sync deferred", id, error instanceof Error ? error.message : "unknown error");
   }
 }
+// Duplicate search: embed the text, then ask Qdrant for similar OPEN complaints in the same ward whose
+// cosine similarity is at least the threshold (0.70, calibrated; see docs/database/vector-db.md).
 async function vectorCandidates(text: string, wardId: number | null) {
   return vec(
     (async () => {
@@ -255,6 +300,9 @@ async function vectorCandidates(text: string, wardId: number | null) {
   );
 }
 
+// The implementation. Each method below is one operation from the contract, grouped by who uses it:
+// reference data, login and sessions, public pages, complaints, duplicates, notifications, admin,
+// DB Lab, and the Vector console.
 export const postgresSource: DataSource = {
   name: "postgres",
   async listWards() {
@@ -298,12 +346,14 @@ export const postgresSource: DataSource = {
       ),
     );
   },
+  // Login: the database checks the password (fn_authenticate uses bcrypt), the app never sees the hash.
   async authenticate(email, password) {
     return anon(async (c) => {
       const r = (await c.query("SELECT * FROM fn_authenticate($1,$2)", [email, password])).rows[0];
       return r ? sessionUser(r) : null;
     });
   },
+  // Self-registration. fn_register_citizen validates and creates a CITIZEN; there is no way to ask for another role.
   async registerCitizen(input: RegisterInput) {
     return anon(async (c) => {
       const r = await c.query("SELECT fn_register_citizen($1,$2,$3,$4) AS user_id", [input.name, input.email, input.phone, input.password]);
@@ -318,6 +368,8 @@ export const postgresSource: DataSource = {
       };
     });
   },
+  // Sessions: a random 256-bit token goes to the browser in a cookie; only its SHA-256 hash is stored in the
+  // database (user_session). A stolen database dump therefore contains no usable session tokens.
   async createSession(userId) {
     const token = randomBytes(32).toString("base64url"),
       hash = createHash("sha256").update(token).digest("hex");
@@ -340,6 +392,8 @@ export const postgresSource: DataSource = {
     });
   },
 
+  // Public dashboard: totals, per-ward and per-department statistics (views 006), recent resolutions and map points.
+  // inOrder() runs the queries one after another because a single database connection runs one query at a time.
   async getPublicStats() {
     return anon(async (c) => {
       const [tot, wards, depts, recent, map] = await inOrder([
@@ -400,6 +454,7 @@ export const postgresSource: DataSource = {
       } as PublicStats;
     });
   },
+  // Public keyword search. Merged duplicates are hidden. Results are ranked with ts_rank (full-text relevance).
   async searchPublicComplaints(q, filter) {
     return anon(async (c) => {
       const f = filters(filter, q.trim() ? 2 : 1);
@@ -413,6 +468,7 @@ export const postgresSource: DataSource = {
       return rows.rows.map(summary);
     });
   },
+  // The public track page. Reads the public views (vw_public_*), which expose only safe columns: no filer, no staff names.
   async getPublicComplaint(id) {
     return anon(async (c) => {
       // Public views run with the owner's rights but expose only safe columns and hide merged duplicates.
@@ -442,6 +498,8 @@ export const postgresSource: DataSource = {
     });
   },
 
+  // The viewer's complaint list. There is no "WHERE filed_by = me" here: row-level security returns only the
+  // rows this role may see (a citizen's own, a staff member's department, a ward admin's ward, ...).
   async listComplaints(viewer, filter) {
     return forViewer(viewer, async (c) => {
       const f = filters(filter);
@@ -449,6 +507,9 @@ export const postgresSource: DataSource = {
       return rows.rows.map(summary);
     });
   },
+  // One complaint with everything its page needs: history, escalations, duplicate matches, the status moves
+  // this viewer may make next (read from status_transition, so the buttons match the state machine), and
+  // whether the viewer has upvoted it. Returns null if RLS hides it.
   async getComplaint(viewer, id) {
     return forViewer(viewer, async (c) => {
       const r = (
@@ -561,6 +622,9 @@ export const postgresSource: DataSource = {
       } as ComplaintDetail;
     });
   },
+  // File a complaint. The INSERT takes the department from the category and sends no deadline and no assignee: the triggers fill those
+  // (005_triggers.sql). After the SQL commits, the complaint is embedded into Qdrant, similar complaints are
+  // found, and each is recorded as a PENDING duplicate_match for staff to review.
   async createComplaint(viewer, input) {
     if (viewer.role !== "CITIZEN") throw new DataError("Only citizens can file complaints.", "FORBIDDEN");
     const made = await forViewer(viewer, async (c) => {
@@ -596,12 +660,16 @@ export const postgresSource: DataSource = {
     }
     return { complaintId: Number(made.complaint_id) };
   },
+  // Status change through the procedure sp_change_status; the trigger enforces the state machine.
+  // Afterwards the Qdrant payload (status, is_open) is refreshed.
   async changeStatus(viewer, id, to, remarks) {
     await forViewer(viewer, async (c) => {
       await c.query("CALL sp_change_status($1,$2,$3)", [id, to, remarks]);
     });
     await syncComplaintVector(viewer, id);
   },
+  // Admin reassignment. Only active STAFF can be chosen. The status is unchanged for an already-assigned
+  // complaint, so no trigger writes history; this method records the reassignment itself and notifies the new assignee.
   async assignComplaint(viewer, id, staffId) {
     if (viewer.role !== "ADMIN") throw new DataError("Only admins can reassign complaints.", "FORBIDDEN");
     await forViewer(viewer, async (c) => {
@@ -627,6 +695,7 @@ export const postgresSource: DataSource = {
     });
     await syncComplaintVector(viewer, id);
   },
+  // Upvote or un-upvote through fn_toggle_upvote (checks, locking and counting happen in the database).
   async toggleUpvote(viewer, id) {
     if (viewer.role !== "CITIZEN") throw new DataError("Only citizens can upvote.", "FORBIDDEN");
     return forViewer(viewer, async (c) => {
@@ -634,6 +703,8 @@ export const postgresSource: DataSource = {
       return { upvoted: r.rows[0].upvoted, upvoteCount: Number(r.rows[0].upvote_count) };
     });
   },
+  // A citizen withdraws their complaint: status CLOSED with the remark "Withdrawn by citizen", and the point is
+  // deleted from Qdrant so it no longer appears as a possible duplicate.
   async withdrawComplaint(viewer, id) {
     if (viewer.role !== "CITIZEN") throw new DataError("Only citizens can withdraw complaints.", "FORBIDDEN");
     await forViewer(viewer, async (c) => {
@@ -660,6 +731,8 @@ export const postgresSource: DataSource = {
     });
   },
 
+  // Duplicate suggestions for the report wizard. Qdrant supplies candidates and scores; Postgres is then asked
+  // for the live status, so complaints closed since the last sync are not suggested.
   async findDuplicateCandidates(input) {
     const ps = await vectorCandidates(`${input.title}. ${input.description}`, input.wardId);
     if (!ps.length) return [];
@@ -721,6 +794,8 @@ export const postgresSource: DataSource = {
     }
     return out;
   },
+  // Staff decision on a detected duplicate. CONFIRMED runs sp_confirm_duplicate (merges the complaint and moves
+  // the upvotes); REJECTED just records the decision.
   async reviewDuplicate(viewer, id, matchedId, decision) {
     if (!["STAFF", "ADMIN"].includes(viewer.role)) throw new DataError("You do not have permission to review duplicates.", "FORBIDDEN");
     await forViewer(viewer, async (c) => {
@@ -774,6 +849,8 @@ export const postgresSource: DataSource = {
     if (viewer.role === "CITIZEN") throw new DataError("You do not have permission to view escalations.", "FORBIDDEN");
     return forViewer(viewer, async (c) => (await c.query(`${escalationSelect} ORDER BY escalated_at DESC LIMIT 500`)).rows.map(escalation));
   },
+  // Admin button "Run SLA sweep now": calls sp_escalate_overdue and reports how many escalation rows were added
+  // (it counts rows created in the last two seconds before and after).
   async runSlaSweep(viewer) {
     if (viewer.role !== "ADMIN") throw new DataError("Only admins can run the SLA sweep.", "FORBIDDEN");
     return forViewer(viewer, async (c) => {
@@ -783,6 +860,7 @@ export const postgresSource: DataSource = {
       return { escalated: Math.max(0, Number(after.rows[0].n) - Number(r.rows[0].n)) };
     });
   },
+  // Admin button "Run auto-close": sp_auto_close_resolved returns how many complaints it closed.
   async runAutoClose(viewer) {
     if (viewer.role !== "ADMIN") throw new DataError("Only admins can run the auto-close.", "FORBIDDEN");
     const r = await forViewer(viewer, (c) => c.query("CALL sp_auto_close_resolved(NULL)"));
@@ -792,6 +870,8 @@ export const postgresSource: DataSource = {
     return { closed };
   },
 
+  // Admin dashboard: KPIs, department statistics, a 14-day filed-versus-resolved series (recursive date list via
+  // generate_series), a ward ranking with RANK() over SLA compliance, and the escalation funnel.
   async getAdminAnalytics(viewer) {
     if (viewer.role !== "ADMIN") throw new DataError("Only admins can view analytics.", "FORBIDDEN");
     return forViewer(viewer, async (c) => {
@@ -867,6 +947,8 @@ export const postgresSource: DataSource = {
       return rs.rows.map(userSummary);
     });
   },
+  // Admin creates a staff account with a random temporary password. The password is hashed in SQL with
+  // crypt(..., gen_salt('bf', 12)) and is shown once to the admin, never stored in plain text.
   async createStaffUser(viewer, input: NewStaffInput) {
     if (viewer.role !== "ADMIN") throw new DataError("Only admins can create staff accounts.", "FORBIDDEN");
     const temp = randomBytes(9).toString("base64url");
@@ -880,6 +962,7 @@ export const postgresSource: DataSource = {
     });
     return { userId: id, temporaryPassword: temp };
   },
+  // Deactivate or reactivate an account. Deactivating also deletes the user's sessions, which signs them out at once.
   async setUserActive(viewer, id, isActive) {
     if (viewer.role !== "ADMIN") throw new DataError("Only admins can manage users.", "FORBIDDEN");
     if (id === viewer.userId) throw new DataError("You cannot deactivate your own account.", "INVALID");
@@ -900,6 +983,8 @@ export const postgresSource: DataSource = {
       sql,
     }));
   },
+  // DB Lab: run one of the fixed, pre-written queries (LAB_QUERIES) as the admin role. The browser sends only the
+  // query id, never SQL text, so DB Lab cannot be used to run arbitrary statements.
   async runLabQuery(viewer, queryId) {
     if (viewer.role !== "ADMIN") throw new DataError("Only admins can run DB Lab queries.", "FORBIDDEN");
     const q = LAB_QUERIES.find((x) => x.id === queryId);
@@ -919,6 +1004,7 @@ export const postgresSource: DataSource = {
     });
   },
 
+  // Vector console: collection settings and point count straight from Qdrant.
   async getVectorCollection() {
     await vec(core.ensureCollection());
     const r = (await qdrant("/collections/complaints")) as { result: QdrantResult };
@@ -933,6 +1019,7 @@ export const postgresSource: DataSource = {
       source: "qdrant",
     };
   },
+  // Vector console search: embed the text and return the nearest points with their scores.
   async vectorSearch(text, filter) {
     const ps = await vectorCandidates(text, filter?.wardId ?? null);
     return ps
@@ -952,15 +1039,19 @@ export const postgresSource: DataSource = {
         } as VectorPoint)
       : null;
   },
+  // Vector console update: change payload fields of one point (the vector itself is unchanged).
   async updateVectorPayload(id, patch) {
     await qdrant("/collections/complaints/points/payload?wait=true", "POST", { payload: patch, points: [id] });
     const p = await this.getVectorPoint(id);
     if (!p) throw new DataError("Vector point not found.", "NOT_FOUND");
     return p;
   },
+  // Vector console delete: remove one point from Qdrant (the complaint stays in Postgres).
   async deleteVectorPoint(id) {
     await qdrant("/collections/complaints/points/delete?wait=true", "POST", { points: [id] });
   },
+  // Re-embed every complaint whose vector_synced_at is NULL (up to 1000) and mark each as synced.
+  // Runs as a system admin identity; one failure is logged and does not stop the rest.
   async reindexVectors() {
     const rows = await forViewer(
       { userId: 0, name: "system", email: "", role: "ADMIN", departmentId: null, wardId: null },

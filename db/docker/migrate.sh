@@ -1,6 +1,11 @@
 #!/bin/bash
+# Apply any migration that has not run yet, on a database that already exists:
+#   docker exec civicfix-db bash /civicfix/migrate.sh
+# (init.sh only runs when the data volume is first created; this covers migrations added later.)
+# -e stop on the first error, -u unset variables are errors, -o pipefail a pipeline fails if any part fails.
 set -euo pipefail
 
+# Same "skip if already recorded" logic as init.sh, applied to the migrations only (not the seed).
 for f in /civicfix/migrations/*.sql; do
   [ -e "$f" ] || continue
   name="$(basename "$f" .sql)"

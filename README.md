@@ -39,7 +39,7 @@ docker compose exec -T db psql -U postgres -d civicfix -f /civicfix/tests/smoke.
 docker compose exec -T db psql -U postgres -d civicfix -f /civicfix/tests/rbac.sql    # 56 GRANT/RLS checks
 docker compose exec -T db psql -U postgres -d civicfix -f /civicfix/tests/rls_transitions.sql  # visibility + illegal transitions
 docker compose exec -T db psql -U postgres -d civicfix -f /civicfix/tests/auto_close.sql       # 14 auto-close checks
-docker compose exec -T db psql -U postgres -d civicfix -f /civicfix/tests/escalation.sql       # 15 escalation-level checks
+docker compose exec -T db psql -U postgres -d civicfix -f /civicfix/tests/escalation.sql       # 16 escalation-level checks
 cd web
 npm run test:smoke   # every page for every role + main flows, over HTTP (app running)
 npm run test:e2e     # the three role journeys in Chrome (Playwright)

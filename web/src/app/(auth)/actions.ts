@@ -6,12 +6,14 @@ import { endSession, startSession } from "@/lib/auth/session";
 import { ROLE_HOME } from "@/lib/constants";
 import { data, DataError } from "@/lib/data";
 
+// State returned to the form: a message, per-field messages, and the typed values so the form can refill.
 export interface AuthState {
   error?: string;
   fieldErrors?: Record<string, string>;
   values?: Record<string, string>;
 }
 
+// Server-side validation with zod. The browser's checks are only a convenience; these always run.
 const loginSchema = z.object({
   email: z.string().trim().email("Enter a valid email address."),
   password: z.string().min(1, "Enter your password."),
@@ -27,6 +29,8 @@ const registerSchema = z.object({
   password: z.string().min(8, "Use at least 8 characters."),
 });
 
+// After login, go back to the page the user wanted, but only to a path on this site. A value such as
+// "//evil.com" or "https://evil.com" is ignored (open-redirect protection).
 function safeNext(next: FormDataEntryValue | null) {
   const n = typeof next === "string" ? next : "";
   return n.startsWith("/") && !n.startsWith("//") ? n : null;
@@ -38,6 +42,7 @@ function fieldErrors(error: z.ZodError) {
   return out;
 }
 
+// Login Server Action: validate, check the password in the database, start a session, redirect.
 export async function signIn(_prev: AuthState, formData: FormData): Promise<AuthState> {
   const values = { email: String(formData.get("email") ?? "") };
   const parsed = loginSchema.safeParse(Object.fromEntries(formData));
@@ -50,6 +55,7 @@ export async function signIn(_prev: AuthState, formData: FormData): Promise<Auth
   redirect(safeNext(formData.get("next")) ?? ROLE_HOME[user.role]);
 }
 
+// Citizen registration Server Action. Signs the new user in straight away.
 export async function register(_prev: AuthState, formData: FormData): Promise<AuthState> {
   const values = {
     name: String(formData.get("name") ?? ""),
@@ -69,6 +75,7 @@ export async function register(_prev: AuthState, formData: FormData): Promise<Au
   redirect(safeNext(formData.get("next")) ?? "/report");
 }
 
+// Delete the session (database row and cookie) and go home.
 export async function signOut() {
   await endSession();
   redirect("/");

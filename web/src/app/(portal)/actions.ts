@@ -14,6 +14,9 @@ import type { ComplaintStatus, DuplicateCandidate, LabResult, VectorHit, VectorP
 
 export type ActionResult<T = undefined> = { ok: true; data?: T; message?: string } | { ok: false; error: string };
 
+// Run a data operation and turn the outcome into { ok, data | error }. A DataError (a refusal by the
+// database, already worded for people) becomes a message the form can show; any other error is rethrown
+// so it is logged by Next.js. refresh() re-renders the current page so it shows the new data.
 async function attempt<T>(fn: () => Promise<T>, message?: string): Promise<ActionResult<T>> {
   try {
     const result = await fn();
@@ -27,6 +30,8 @@ async function attempt<T>(fn: () => Promise<T>, message?: string): Promise<Actio
 
 /* ---------- Citizen ---------- */
 
+// Validation for the report form. z.coerce.number() turns the form's text into a number first.
+// The limits match the database CHECKs (title 5+ in SQL, 8+ here for a nicer message; description 20 to 2000).
 const complaintSchema = z.object({
   wardId: z.coerce.number().int().positive("Choose the ward where the problem is."),
   categoryId: z.coerce.number().int().positive("Choose a category."),
@@ -42,6 +47,9 @@ export interface FileComplaintState {
   fieldErrors?: Partial<Record<keyof z.infer<typeof complaintSchema>, string>>;
 }
 
+// Server Action behind the report form. Order: check who is signed in, validate, call the data layer, redirect
+// to the new complaint. requireUser("CITIZEN") re-checks the session on the server: a Server Action is a public
+// endpoint, so the page's own check is not enough.
 export async function fileComplaint(_prev: FileComplaintState, formData: FormData): Promise<FileComplaintState> {
   const viewer = await requireUser("CITIZEN");
   const raw = Object.fromEntries([...formData.entries()].filter(([, v]) => v !== ""));
@@ -70,6 +78,8 @@ export async function fileComplaint(_prev: FileComplaintState, formData: FormDat
   redirect(`/me/complaints/${id}?filed=1`);
 }
 
+// Called by the report wizard while the citizen types. The text is cut to the same limits as the form,
+// then the data layer asks Qdrant for similar open complaints in the same ward.
 export async function checkDuplicates(input: { title: string; description: string; wardId: number | null }): Promise<DuplicateCandidate[]> {
   await requireUser("CITIZEN");
   const title = input.title.slice(0, 150);
@@ -77,11 +87,13 @@ export async function checkDuplicates(input: { title: string; description: strin
   return data.findDuplicateCandidates({ title, description, wardId: input.wardId });
 }
 
+// Upvote or remove the upvote (the database refuses upvoting your own complaint).
 export async function toggleUpvote(complaintId: number) {
   const viewer = await requireUser("CITIZEN");
   return attempt(() => data.toggleUpvote(viewer, complaintId));
 }
 
+// A citizen closes their own complaint; it is also removed from the vector index.
 export async function withdrawComplaint(complaintId: number) {
   const viewer = await requireUser("CITIZEN");
   return attempt(() => data.withdrawComplaint(viewer, complaintId), "Complaint withdrawn.");
@@ -89,6 +101,8 @@ export async function withdrawComplaint(complaintId: number) {
 
 /* ---------- Status changes (all roles, checked by the state machine) ---------- */
 
+// Used by staff, admins and citizens. The buttons shown are already limited to the allowed moves, but the
+// real check is in the database. A note is required for RESOLVED and REOPENED so the history explains itself.
 export async function changeStatus(complaintId: number, to: ComplaintStatus, remarks: string) {
   const viewer = await requireUser();
   const note = remarks.trim().slice(0, 500) || null;
@@ -98,26 +112,31 @@ export async function changeStatus(complaintId: number, to: ComplaintStatus, rem
 
 /* ---------- Staff & admin ---------- */
 
+// Staff decision on a detected duplicate: merge it (CONFIRMED) or keep it separate (REJECTED).
 export async function reviewDuplicate(complaintId: number, matchedComplaintId: number, decision: "CONFIRMED" | "REJECTED") {
   const viewer = await requireUser("STAFF", "ADMIN");
   return attempt(() => data.reviewDuplicate(viewer, complaintId, matchedComplaintId, decision), decision === "CONFIRMED" ? "Merged as a duplicate." : "Marked as a separate issue.");
 }
 
+// Admin only: give a complaint to a different staff member.
 export async function assignComplaint(complaintId: number, staffId: number) {
   const viewer = await requireUser("ADMIN");
   return attempt(() => data.assignComplaint(viewer, complaintId, staffId), "Complaint reassigned.");
 }
 
+// Admin only: run the escalation procedure now (pg_cron also runs it every 15 minutes).
 export async function runSlaSweep() {
   const viewer = await requireUser("ADMIN");
   return attempt(() => data.runSlaSweep(viewer));
 }
 
+// Admin only: close complaints that stayed RESOLVED for over 7 days (pg_cron does it nightly).
 export async function runAutoClose() {
   const viewer = await requireUser("ADMIN");
   return attempt(() => data.runAutoClose(viewer));
 }
 
+// Validation for the "create staff or admin account" form.
 const staffSchema = z.object({
   name: z.string().trim().min(2, "Enter a name.").max(100),
   email: z.string().trim().email("Enter a valid email.").max(150),
@@ -134,6 +153,8 @@ export interface CreateStaffState {
   created?: { email: string; temporaryPassword: string };
 }
 
+// Admin creates a staff or admin account. A STAFF member must have both a department and a ward (the same rule
+// the database enforces in ck_app_user_role_scope). The generated temporary password is returned once.
 export async function createStaff(_prev: CreateStaffState, formData: FormData): Promise<CreateStaffState> {
   const viewer = await requireUser("ADMIN");
   const raw = Object.fromEntries([...formData.entries()].filter(([, v]) => v !== ""));
@@ -163,6 +184,7 @@ export async function createStaff(_prev: CreateStaffState, formData: FormData): 
   }
 }
 
+// Admin switches an account on or off. Switching off also ends the user's sessions.
 export async function setUserActive(userId: number, isActive: boolean) {
   const viewer = await requireUser("ADMIN");
   return attempt(() => data.setUserActive(viewer, userId, isActive), isActive ? "Account reactivated." : "Account deactivated.");
@@ -170,6 +192,7 @@ export async function setUserActive(userId: number, isActive: boolean) {
 
 /* ---------- Notifications ---------- */
 
+// Mark some or all of the viewer's own notifications as read.
 export async function markNotificationsRead(ids: number[] | "all") {
   const viewer = await requireUser();
   return attempt(() => data.markNotificationsRead(viewer, ids));
@@ -177,6 +200,7 @@ export async function markNotificationsRead(ids: number[] | "all") {
 
 /* ---------- DB Lab & Vector console (admin) ---------- */
 
+// DB Lab: the browser sends only the id of a pre-written query, never SQL text.
 export async function runLabQuery(queryId: string): Promise<ActionResult<LabResult>> {
   const viewer = await requireUser("ADMIN");
   try {
@@ -187,6 +211,7 @@ export async function runLabQuery(queryId: string): Promise<ActionResult<LabResu
   }
 }
 
+// Vector console search, admin only. Needs at least three characters; the text is capped at 500.
 export async function vectorSearch(text: string, wardId: number | null, openOnly: boolean): Promise<ActionResult<VectorHit[]>> {
   await requireUser("ADMIN");
   if (text.trim().length < 3) return { ok: false, error: "Type at least a few words to search." };
@@ -198,6 +223,8 @@ export async function getVectorPoint(id: number): Promise<ActionResult<VectorPoi
   return { ok: true, data: await data.getVectorPoint(id) };
 }
 
+// Vector console: set one payload field on a point. The key must be a simple lowercase name. The text value is
+// converted: "true" and "false" to booleans, "null" to null, a number-like string to a number.
 export async function updateVectorPayload(id: number, key: string, value: string): Promise<ActionResult<VectorPoint>> {
   await requireUser("ADMIN");
   if (!/^[a-z_][a-z0-9_]{0,40}$/.test(key)) return { ok: false, error: "Payload keys use lowercase letters, digits and underscores." };
@@ -210,11 +237,13 @@ export async function updateVectorPayload(id: number, key: string, value: string
   }
 }
 
+// Vector console: delete one point (the complaint itself stays in PostgreSQL).
 export async function deleteVectorPoint(id: number) {
   await requireUser("ADMIN");
   return attempt(() => data.deleteVectorPoint(id), `Point ${id} deleted from the collection.`);
 }
 
+// Vector console: re-embed every complaint not yet synced.
 export async function reindexVectors() {
   await requireUser("ADMIN");
   return attempt(() => data.reindexVectors());

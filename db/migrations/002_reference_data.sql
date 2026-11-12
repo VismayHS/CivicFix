@@ -4,6 +4,7 @@
 -- web/src/lib/data/mock/seed.ts and re-run the script.
 -- =====================================================================
 
+-- department: the municipal departments. Each one owns some complaint categories and has its own staff.
 INSERT INTO department (department_id, department_name, contact_email, description) VALUES
   (1, 'Roads & Infrastructure', 'roads@civicfix.test', 'Road surfaces, footpaths, medians and junction repairs.'),
   (2, 'Solid Waste Management', 'swm@civicfix.test', 'Door-to-door collection, black spots and illegal dumping.'),
@@ -13,6 +14,7 @@ INSERT INTO department (department_id, department_name, contact_email, descripti
   (6, 'Public Health', 'health@civicfix.test', 'Mosquito control, stagnant water and stray animal welfare.'),
   (7, 'Parks & Urban Forestry', 'parks@civicfix.test', 'Parks, playgrounds, tree pruning and fallen trees.');
 
+-- ward: the city wards. latitude and longitude are the ward centre, used for the map.
 INSERT INTO ward (ward_id, ward_number, ward_name, zone, ward_population, latitude, longitude) VALUES
   (1, 151, 'Koramangala', 'South-East', 63800, 12.9352, 77.6245),
   (2, 80, 'Indiranagar', 'East', 58200, 12.9784, 77.6408),
@@ -25,6 +27,8 @@ INSERT INTO ward (ward_id, ward_number, ward_name, zone, ward_population, latitu
   (9, 176, 'BTM Layout', 'Bommanahalli', 69800, 12.9166, 77.6101),
   (10, 154, 'Basavanagudi', 'South', 45200, 12.9406, 77.5738);
 
+-- complaint_category: what a citizen can report. department_id decides who handles it; sla_hours is the time
+-- allowed to resolve it (trg_complaint_prepare turns it into the complaint's sla_deadline).
 INSERT INTO complaint_category (category_id, category_name, department_id, sla_hours) VALUES
   (1, 'Pothole or damaged road', 1, 72),
   (2, 'Broken footpath', 1, 120),
@@ -42,6 +46,9 @@ INSERT INTO complaint_category (category_id, category_name, department_id, sla_h
   (14, 'Fallen tree or branch', 7, 12),
   (15, 'Park maintenance', 7, 168);
 
+-- status_transition: the status state machine, stored as data. A status change is allowed only if
+-- (from_status, to_status, actor_role) is listed here; the trigger trg_complaint_status_guard checks it.
+-- SYSTEM means automation (the triggers and pg_cron), not a person.
 INSERT INTO status_transition (from_status, to_status, actor_role) VALUES
   ('OPEN', 'ASSIGNED', 'SYSTEM'),
   ('OPEN', 'ASSIGNED', 'ADMIN'),
@@ -78,13 +85,18 @@ INSERT INTO status_transition (from_status, to_status, actor_role) VALUES
   ('REOPENED', 'CLOSED', 'ADMIN'),
   ('ESCALATED', 'CLOSED', 'ADMIN');
 
+-- escalation_policy: who is told, and when, once a complaint passes its deadline.
+-- Level 1 the department head at the breach, level 2 the ward admin after 24 h, level 3 the commissioner after 48 h.
 INSERT INTO escalation_policy (escalation_level, target_role, hours_after_breach, label) VALUES
   (1, 'DEPT_HEAD', 0, 'Department head'),
   (2, 'WARD_ADMIN', 24, 'Ward administrator'),
   (3, 'COMMISSIONER', 48, 'Municipal commissioner');
 
+-- These rows were inserted with explicit ids, so move each id sequence past the highest one.
+-- Without this, the next ordinary INSERT would try to reuse id 1 and fail.
 SELECT setval(pg_get_serial_sequence('department', 'department_id'), (SELECT max(department_id) FROM department));
 SELECT setval(pg_get_serial_sequence('ward', 'ward_id'), (SELECT max(ward_id) FROM ward));
 SELECT setval(pg_get_serial_sequence('complaint_category', 'category_id'), (SELECT max(category_id) FROM complaint_category));
 
+-- Record that this migration has run.
 INSERT INTO schema_migrations (version) VALUES ('002_reference_data');

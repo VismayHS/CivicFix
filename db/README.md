@@ -61,7 +61,7 @@ Load Qdrant after a fresh start (from `web/`): `npm run vector:setup && npm run 
 | `tests/smoke.sql` | Authentication, RLS, triggers, status change, SLA procedure smoke checks | Passes |
 | `tests/rbac.sql` | 56 role-by-role GRANT and RLS assertions | Passes |
 | `tests/rls_transitions.sql` | Complaint visibility per role; illegal status transitions rejected by the state machine | Passes |
-| `tests/escalation.sql` | 15 checks on `sp_escalate_overdue`, level by level | Passes |
+| `tests/escalation.sql` | 16 checks on `sp_escalate_overdue`, level by level | Passes |
 | `tests/auto_close.sql` | 14 checks on `sp_auto_close_resolved`: who may run it, the 7-day window, history, notification, cron job | Passes |
 | Qdrant | Collection + 6 payload indexes, MiniLM embeddings in Node, `npm run vector:*` scripts ([docs](../docs/database/vector-db.md)) | Done; threshold calibrated to 0.70 |
 

@@ -2,7 +2,7 @@
 
 The single source of truth is [`db/migrations/001_schema.sql`](../../db/migrations/001_schema.sql). This page explains it. Schema v2 evolves the **Lab 4 database** (which actually ran in Postgres and has the Chen ER diagram) and merges in the good parts of the **EL3 schema PDF**.
 
-## Tables (15)
+## Tables (14 in the model, plus `schema_migrations`)
 
 | Table | Primary key | Foreign keys | Notes |
 |---|---|---|---|

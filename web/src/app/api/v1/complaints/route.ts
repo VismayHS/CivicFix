@@ -4,8 +4,11 @@ import { data } from "@/lib/data";
 import type { ComplaintFilter } from "@/lib/types";
 import { apiFailure, jsonError } from "../_utils";
 
+// Shape of a new complaint. Limits match the database: title 8 to 150 characters, description 20 to 2000.
 const schema = z.object({ wardId:z.coerce.number().int().positive(),categoryId:z.coerce.number().int().positive(),title:z.string().trim().min(8).max(150),description:z.string().trim().min(20).max(2000),address:z.string().trim().max(255).nullable().optional(),latitude:z.number().min(-90).max(90).nullable().optional(),longitude:z.number().min(-180).max(180).nullable().optional() });
 
+// GET /api/v1/complaints?status=&ward=&category=&q=  ->  { data: complaints }.
+// Returns only what the signed-in user's role may see (row-level security does the filtering).
 export async function GET(request: Request) {
   try {
     const viewer=await getSessionUser();if(!viewer)return jsonError("Sign in to view complaints.",401);
@@ -15,6 +18,8 @@ export async function GET(request: Request) {
   } catch(error){return apiFailure(error);}
 }
 
+// POST /api/v1/complaints  ->  201 { data: { complaintId } }. Citizens only.
+// The database triggers set the deadline and assign a staff member.
 export async function POST(request: Request) {
   try {
     const viewer=await getSessionUser();if(!viewer)return jsonError("Sign in to file a complaint.",401);
