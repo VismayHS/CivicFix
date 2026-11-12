@@ -18,7 +18,7 @@ Access control lives in Postgres: roles, column GRANTs and row-level security. T
 
 ## Design
 
-**Why 15 tables?** The Lab 4 schema and the EL3 schema PDF disagreed. Schema v2 reconciles them ([schema-v2.md](database/schema-v2.md)).
+**Why 15 tables (the diagram shows 14)?** The 15th is `schema_migrations`, which only records which migration files have run; the model has 14. The Lab 4 schema and the EL3 schema PDF disagreed. Schema v2 reconciles them ([schema-v2.md](database/schema-v2.md)).
 
 **ER → relational mapping.** Every rule is visible in [er-diagram-v2](diagrams/er-diagram-v2.png) and [relational-schema-v2](diagrams/relational-schema-v2.png):
 
@@ -51,7 +51,7 @@ Access control lives in Postgres: roles, column GRANTs and row-level security. T
 - the latitude/longitude pair rule
 - UNIQUE email, ward name and ward number
 
-There are 22 indexes, including a GIN index on the generated `search_tsv` column for full-text search.
+There are 23 indexes, including a GIN index on the generated `search_tsv` column for full-text search.
 
 **Why PostgreSQL?**
 
@@ -172,6 +172,9 @@ Real outputs are in [queries.md](database/queries.md).
 
 | Topic | Answer |
 |---|---|
+| What kind of NoSQL | A **vector database**. A *point* is an id, a vector (a list of 384 numbers) and a JSON *payload*. There are no tables, joins or SQL. The point id is the `complaint_id`, so it links back to Postgres without a mapping table |
+| Why not just SQL | SQL matches words (`search_tsv`, query 14). A vector search matches *meaning*: "Large crater on the road" finds "Deep pothole" |
+| How it searches | Cosine similarity between the new text's vector and stored ones. Qdrant uses an **HNSW** graph index (here `m=16`, `ef_construct=100`), so it does not compare against every point. Payload indexes let the filter (ward, open) run inside the search |
 | Embedding | `all-MiniLM-L6-v2`, 384 dimensions, run inside Node (Transformers.js), so no external AI service |
 | Creation | Collection `complaints`, cosine distance, payload indexes on ward_id, category_id, department_id, status, is_open, created_at |
 | Read | Embed the new text → search with filter `ward_id = X AND is_open = true` → candidates with score ≥ 0.70 |
@@ -179,6 +182,105 @@ Real outputs are in [queries.md](database/queries.md).
 | Delete | Withdrawn complaints are removed; the admin console can delete a point |
 | Consistency | Postgres is the truth. `vector_synced_at` marks rows already in Qdrant; `npm run vector:reindex -- --missing` repairs any gap. Suggestions are re-checked against Postgres's live status |
 | Why 0.70 | Calibrated on labelled seed pairs, maximising F2 (recall weighted). Missing a duplicate costs more than one extra suggestion |
+
+## Frontend and Next.js (`web/`)
+
+**Stack.** Next.js 16 (App Router, Turbopack) with React 19, TypeScript, Tailwind CSS 4 and shadcn/ui components. Validation uses `zod`. The database driver is `pg`. The embedding model runs in Node through `@huggingface/transformers`.
+
+**What Next.js is doing for us.** One project holds the pages, the server code and the REST API. There is no separate backend service. Pages render on the server, so the browser never holds a database password and never talks to Postgres or Qdrant directly.
+
+**Folder map (`web/src/app`).** Folders in parentheses are *route groups*: they share a layout but do not appear in the URL.
+
+| Folder | Pages | Who |
+|---|---|---|
+| `(public)` | home, `/dashboard`, `/search`, `/track`, `/track/[id]` | anyone, signed out |
+| `(auth)` | `/login`, `/register` | anyone |
+| `(portal)` | `/report`, `/me/complaints`, `/notifications`, `/staff/*`, `/admin/*` | signed in; role decides which section |
+| `api/v1` | 13 route handlers (`route.ts`) | REST API: auth, complaints, status, upvote, duplicates, sweep, auto-close, health, public stats |
+
+21 pages in total, `[id]` folders are dynamic routes.
+
+**Server Components by default.** A page is a Server Component: it is an `async` function that calls `data.listComplaints(...)` and returns HTML. Only the interactive parts are Client Components (`"use client"`, for example the report wizard, charts, the map and the DB Lab editor). Slow parts are wrapped in `<Suspense>` with a skeleton, so the page shell appears first and the data streams in. `next.config.ts` turns on `cacheComponents`, which is what lets the static shell and the dynamic parts mix on one page (the build output marks these routes as "Partial Prerender").
+
+**How a write works.** The form posts to a **Server Action** (`"use server"` in `actions.ts`), not to a hand-written endpoint. The action (1) re-reads the session with `requireUser()`, never trusting the browser, (2) validates the input with `zod`, (3) calls the data layer, which runs the SQL, and (4) calls `refresh()` so the page shows the new data. If the database refuses (a CHECK, a trigger, a missing privilege), the error is turned into a message for the form.
+
+**The data layer (`lib/data`).** `contract.ts` is a TypeScript interface (`DataSource`) listing every operation the app needs. There are two implementations: `mock` (in memory, used while the UI was built) and `postgres` (the real one). `DATA_SOURCE=postgres` in `web/.env.local` selects it. Every page and action imports the single `data` object, so the UI does not know which one is running. `/api/v1/health` reports which is active. Every Postgres call goes through `asRole()`, which opens a transaction, runs `SET LOCAL ROLE civic_<role>` and sets `app.user_id`, `app.role`, `app.ward_id`, `app.department_id`. From then on **the database** decides what the user may see.
+
+**Authentication in the app.**
+- Login calls the SQL function `fn_authenticate` (bcrypt through `pgcrypto`). On success the app creates a session row and sets the cookie `cf_session` (`httpOnly`, `sameSite=lax`, `secure` in production, 7 days). The cookie holds a random token. Only its SHA-256 is stored in `user_session`.
+- `proxy.ts` is the Next.js 16 name for middleware. It runs before the page and only checks that the cookie *exists* (routes `/me`, `/report`, `/notifications`, `/staff`, `/admin`). It is a fast first gate, not the security.
+- The real check is `requireUser(role)` in `lib/auth/session.ts`, called on the server by every protected page and action. It looks the token up in `user_session`, and sends the user to their own home if the role is wrong. `import "server-only"` makes the build fail if that code is ever imported into a client file.
+
+**Where Qdrant appears in the UI.** The report wizard waits briefly after typing stops (debounce), calls the `checkDuplicates` action, which embeds the text and searches Qdrant, then shows "about 89% similar". Staff review matches at `/staff/duplicates`. Administrators get the Vector console at `/admin/vector` (search, update payload, delete) and the DB Lab at `/admin/db-lab`.
+
+**Likely questions.**
+- *Server Component or Client Component?* Server by default (can read the database, ships no JavaScript). Client only when it needs state or the browser: forms, charts, map.
+- *Server Action or API route?* The web UI uses Server Actions. The `/api/v1` routes are a REST surface for other clients and for `npm run test:smoke`; both call the same `data` object.
+- *Is hiding a button the security?* No. The proxy, `requireUser` and, last, Postgres RLS each refuse independently. Even a forged request would get zero rows or SQLSTATE `42501`.
+- *Why a mock source?* The UI could be built and tested before the SQL existed, and the contract kept both sides honest.
+- *How is the UI tested?* `npm run test:e2e`: 10 Playwright tests in Chrome for the citizen, staff and admin journeys and phone-width layout. `npm run test:smoke` signs in as each role over HTTP and requests every page.
+
+## If they say "show me where that is and how it connects"
+
+Do not hunt through folders. Answer with the **map**, then **prove it live** with one of the commands below.
+
+**The map: what lives where**
+
+| Layer | Where | One line |
+|---|---|---|
+| Browser pages | `web/src/app/(public)`, `(auth)`, `(portal)` | Server Components; forms call Server Actions |
+| Gate and session | `web/src/proxy.ts`, `web/src/lib/auth/session.ts` | cookie present? then `requireUser(role)` checks `user_session` |
+| Mutations | `web/src/app/(portal)/actions.ts` | validate with zod, call `data.*`, refresh |
+| REST API | `web/src/app/api/v1/**/route.ts` (13) | same `data` object as the pages |
+| One contract | `web/src/lib/data/contract.ts` | the interface both data sources implement |
+| SQL access | `web/src/lib/data/postgres/index.ts`, function `asRole()` | `SET LOCAL ROLE civic_<role>` plus `app.*` settings |
+| Vector access | `web/src/lib/vector/core.ts` | embed text, call Qdrant, `complaintText()` |
+| Schema (DDL) | `db/migrations/001_schema.sql` | 15 tables, constraints, 23 indexes |
+| Reference data | `002_reference_data.sql` | departments, wards, categories, SLA, state machine rows, escalation policy |
+| Functions, procedures | `003_functions.sql`, `004_procedures.sql`, `009_auto_close_resolved.sql` | assignment, SLA compliance, status change, escalation, auto-close |
+| Triggers | `005_triggers.sql` | 6 triggers |
+| Views | `006_views.sql` | 10 views + 1 materialized view |
+| Roles, GRANTs, RLS | `007_rbac_rls.sql` | 4 roles, column grants, 18 policies |
+| Scheduled jobs | `008_cron.sql` | 4 pg_cron jobs |
+| Seed data | `db/seed/` | 176 complaints, 56 users |
+| Queries | `db/queries/01..20-*.sql`, shown in `/admin/db-lab` | joins, nested, correlated, recursive |
+| Tests | `db/tests/*.sql`, `web/e2e/*.spec.ts`, `web/scripts/e2e-smoke.ts` | SQL, browser, HTTP |
+| Containers | `docker-compose.yml` | `civicfix-db` (Postgres 17 + pg_cron), `civicfix-qdrant` |
+
+**The trace: one complaint, end to end.** If asked how things are connected, walk this path out loud:
+
+1. **Browser.** `report-wizard.tsx` (a Client Component). While typing, it calls the `checkDuplicates` Server Action, which embeds the text and searches Qdrant (`lib/vector/core.ts`). The citizen sees "89% similar".
+2. **Submit.** The `fileComplaint` Server Action runs `requireUser("CITIZEN")`, validates with zod, and calls `data.createComplaint`.
+3. **Postgres.** `asRole()` opens a transaction as `civic_citizen` with the user's id, then `INSERT INTO complaint`.
+4. **Triggers fire in order.**
+   - `trg_complaint_before_insert` (`trg_complaint_prepare`) fills the department and `sla_deadline`.
+   - `trg_complaint_validate_status` checks the status.
+   - `trg_complaint_after_insert` (`trg_complaint_insert_workflow`) writes history row 1 ("Complaint filed"), calls `fn_pick_assignee`, and updates the complaint to ASSIGNED. That update fires the state-machine check and `trg_complaint_status_audit` again, which writes history row 2 ("Auto-assigned to Ravi Kumar", by the system). Then it notifies the assignee and the citizen.
+5. **Commit.** Only after the SQL commits does the app upsert the vector into Qdrant and set `vector_synced_at`. If Qdrant is down the report still succeeds and `vector:reindex -- --missing` repairs it.
+6. **Later, with no user involved.** `pg_cron` runs `sp_escalate_overdue` every 15 minutes. It adds `escalation` rows and changes the status to ESCALATED, and the audit trigger flags the row for re-sync to Qdrant.
+7. **Back in the browser.** RLS decides which of these rows each role can see.
+
+**Prove the connections live (copy these)**
+
+```sql
+-- psql: docker exec -it civicfix-db psql -U postgres -d civicfix
+\dt                                  -- all tables
+\d complaint                         -- columns, PK, FKs, CHECKs, indexes, triggers on one screen
+SELECT conrelid::regclass AS child, conname, confrelid::regclass AS parent
+  FROM pg_constraint WHERE contype = 'f' ORDER BY 1;          -- every foreign key: who points at whom
+SELECT tgrelid::regclass AS "table", tgname FROM pg_trigger
+ WHERE NOT tgisinternal AND tgrelid::regclass::text NOT LIKE 'cron.%';   -- the 6 triggers
+\df fn_*                              -- the 14 functions
+SELECT proname FROM pg_proc WHERE prokind = 'p';              -- the 4 procedures (\df does not list procedures)
+\dv                                   -- views
+SELECT jobname, schedule FROM cron.job;                        -- the 4 scheduled jobs
+\dp complaint                         -- who may do what to complaint (GRANTs)
+SELECT tablename, policyname FROM pg_policies WHERE schemaname = 'public';   -- the 18 RLS policies
+```
+
+- **In the app:** `/admin/db-lab` runs the 20 queries on the real data. `/admin/vector` shows what Qdrant holds. `/api/v1/health` shows which data source is active.
+- **In Qdrant:** http://localhost:6333/dashboard, collection `complaints`, point id equals `complaint_id`.
+- **If they point at a file and ask what it does:** say which layer from the map it belongs to, then its one-line job.
 
 ## If they ask for a live change
 

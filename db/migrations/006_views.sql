@@ -24,6 +24,11 @@ FROM app_user;
 -- Views the data source reads (list pages, dashboards)
 -- ---------------------------------------------------------------------
 
+-- Complaint list pages: one row per complaint with the names already joined in (category, department,
+-- ward, assignee) and the highest escalation level so far.
+-- WITH (security_invoker = true) makes the view run with the CALLER's rights, so row-level security
+-- still applies: a citizen selecting from it sees only their own complaints. (Without it, a view runs
+-- with its owner's rights and would bypass RLS.)
 CREATE OR REPLACE VIEW v_complaint_summary WITH (security_invoker = true) AS
 SELECT c.complaint_id, c.title, c.category_id, cat.category_name,
        c.department_id, d.department_name, c.ward_id, w.ward_name,
@@ -38,6 +43,12 @@ JOIN department d           ON d.department_id = c.department_id
 JOIN ward w                 ON w.ward_id = c.ward_id
 LEFT JOIN app_user assignee ON assignee.user_id = c.assigned_to;
 
+-- Per-ward statistics for the dashboard. FILTER (WHERE ...) restricts one aggregate to matching rows, so a
+-- single pass over complaint produces every count:
+--   open_count / resolved_count / breached_count (open and past its deadline)
+--   avg_resolution_hours   average of resolved_at - created_at, in hours
+--   sla_met_pct            share of resolved complaints that met the deadline (NULLIF avoids dividing by 0)
+-- LEFT JOIN keeps wards that have no complaints yet.
 CREATE OR REPLACE VIEW v_public_ward_stats WITH (security_invoker = true) AS
 SELECT w.ward_id, w.ward_name, w.zone,
        count(c.complaint_id) FILTER (WHERE c.status IN ('OPEN','ASSIGNED','IN_PROGRESS','REOPENED','ESCALATED')) AS open_count,
@@ -53,6 +64,7 @@ FROM ward w
 LEFT JOIN complaint c ON c.ward_id = w.ward_id
 GROUP BY w.ward_id;
 
+-- The same measures grouped by department instead of ward.
 CREATE OR REPLACE VIEW v_department_stats WITH (security_invoker = true) AS
 SELECT d.department_id, d.department_name,
        count(c.complaint_id) FILTER (WHERE c.status IN ('OPEN','ASSIGNED','IN_PROGRESS','REOPENED','ESCALATED')) AS open_count,
@@ -154,6 +166,8 @@ LEFT JOIN escalation_policy nxt   ON nxt.escalation_level = cur.current_level + 
 -- no filer, no staff names. The track page reads these as civic_anon.
 -- ---------------------------------------------------------------------
 
+-- Deliberately NOT security_invoker: it runs with its owner's rights so the anonymous public role can read
+-- these few safe columns without any access to the complaint table itself. Duplicates are left out.
 CREATE OR REPLACE VIEW vw_public_complaint AS
 SELECT c.complaint_id, c.title, c.description,
        c.category_id, cat.category_name, c.department_id, d.department_name,

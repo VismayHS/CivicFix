@@ -1,3 +1,7 @@
+// Browser journeys for the citizen role (Playwright, real Chrome, real database):
+//   1. a signed-out visitor can browse the public pages, search and track a complaint
+//   2. the report wizard suggests the existing similar complaint, then files the new one, then withdraws it
+// Each test fails on any console error, so a page that loads but throws in React still fails.
 import { ACCOUNTS, expect, signIn, test } from "./helpers";
 
 test.describe("citizen journey", () => {

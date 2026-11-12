@@ -3,12 +3,13 @@
 -- Tables, keys and constraints. Evolved from the Lab 4 schema, merged
 -- with the EL3 schema PDF. See docs/database/schema-v2.md for the
 -- reasoning behind every change.
--- Owner: Ashvin (backend). Do not edit without updating the ER diagram,
+-- Author: Vismay (reviewed by Ashvin). Do not edit without updating the ER diagram,
 -- the relational schema diagram and web/src/lib/types.ts.
 -- =====================================================================
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;   -- crypt()/gen_salt() for password hashing
 
+-- Bookkeeping, not part of the model: one row per migration file that has run (see db/docker/migrate.sh).
 CREATE TABLE schema_migrations (
     version     VARCHAR(100) PRIMARY KEY,
     applied_at  TIMESTAMPTZ  NOT NULL DEFAULT now()
@@ -23,7 +24,11 @@ CREATE TABLE department (
     contact_email    VARCHAR(150) NOT NULL,
     description      TEXT,
     created_at       TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    -- Constraint names say what they are: pk_ PRIMARY KEY, uq_ UNIQUE, ck_ CHECK, fk_ FOREIGN KEY.
+    -- Naming them (instead of letting Postgres invent names) gives readable error messages and lets
+    -- ALTER TABLE ... DROP CONSTRAINT refer to them.
     CONSTRAINT uq_department_name  UNIQUE (department_name),
+    -- ~* is a case-insensitive regular-expression match: some text, one @, some text, a dot, some text, no spaces.
     CONSTRAINT ck_department_email CHECK (contact_email ~* '^[^@\s]+@[^@\s]+\.[^@\s]+$')
 );
 
@@ -39,6 +44,7 @@ CREATE TABLE ward (
     CONSTRAINT uq_ward_number      UNIQUE (ward_number),
     CONSTRAINT uq_ward_name        UNIQUE (ward_name),
     CONSTRAINT ck_ward_population  CHECK (ward_population IS NULL OR ward_population >= 0),
+    -- Valid coordinate ranges: latitude -90 to 90, longitude -180 to 180.
     CONSTRAINT ck_ward_latitude    CHECK (latitude  BETWEEN -90  AND 90),
     CONSTRAINT ck_ward_longitude   CHECK (longitude BETWEEN -180 AND 180)
 );
@@ -61,16 +67,28 @@ CREATE TABLE app_user (
     CONSTRAINT uq_app_user_email      UNIQUE (email),
     CONSTRAINT ck_app_user_email      CHECK (email ~* '^[^@\s]+@[^@\s]+\.[^@\s]+$'),
     CONSTRAINT ck_app_user_role       CHECK (role IN ('CITIZEN', 'STAFF', 'ADMIN')),
+    -- A cross-column rule: the role decides which scope columns must be set.
+    --   CITIZEN has no department and no ward;
+    --   STAFF must have both;
+    --   ADMIN has no department; a ward admin has a ward, the commissioner has none (NULL = whole city).
     CONSTRAINT ck_app_user_role_scope CHECK (
            (role = 'CITIZEN' AND department_id IS NULL     AND ward_id IS NULL)
         OR (role = 'STAFF'   AND department_id IS NOT NULL AND ward_id IS NOT NULL)
         OR (role = 'ADMIN'   AND department_id IS NULL)
     ),
+    -- Nobody supervises themselves.
     CONSTRAINT ck_app_user_supervisor CHECK (supervisor_id IS NULL OR supervisor_id <> user_id),
+    -- Foreign-key rules used throughout this file:
+    --   ON UPDATE CASCADE  if the referenced key changes, the change is copied to the rows that reference it
+    --   ON DELETE RESTRICT refuse to delete a row that is still referenced (protects people, wards, departments)
+    --   ON DELETE SET NULL delete is allowed; the reference is cleared
+    --   ON DELETE CASCADE  delete the referencing rows too (history, notifications, upvotes follow their complaint)
     CONSTRAINT fk_app_user_department FOREIGN KEY (department_id) REFERENCES department (department_id)
         ON UPDATE CASCADE ON DELETE RESTRICT,
     CONSTRAINT fk_app_user_ward       FOREIGN KEY (ward_id) REFERENCES ward (ward_id)
         ON UPDATE CASCADE ON DELETE RESTRICT,
+    -- Self-reference: the recursive "supervises" relationship. SET NULL so removing a supervisor
+    -- does not delete the staff who reported to them.
     CONSTRAINT fk_app_user_supervisor FOREIGN KEY (supervisor_id) REFERENCES app_user (user_id)
         ON UPDATE CASCADE ON DELETE SET NULL
 );
@@ -79,7 +97,10 @@ CREATE TABLE app_user (
 CREATE TABLE user_phone (
     user_id       INTEGER     NOT NULL,
     phone_number  VARCHAR(16) NOT NULL,
+    -- Composite primary key (user_id, phone_number): a user can have many numbers but not the same number twice.
+    -- This is the standard table for a multivalued attribute.
     CONSTRAINT pk_user_phone        PRIMARY KEY (user_id, phone_number),
+    -- An optional + followed by 7 to 15 digits.
     CONSTRAINT ck_user_phone_format CHECK (phone_number ~ '^\+?[0-9]{7,15}$'),
     CONSTRAINT fk_user_phone_user   FOREIGN KEY (user_id) REFERENCES app_user (user_id)
         ON UPDATE CASCADE ON DELETE CASCADE
@@ -94,6 +115,7 @@ CREATE TABLE complaint_category (
     sla_hours      INTEGER      NOT NULL DEFAULT 72,
     created_at     TIMESTAMPTZ  NOT NULL DEFAULT now(),
     CONSTRAINT uq_category_name          UNIQUE (category_name),
+    -- An SLA between 1 hour and 30 days (720 hours).
     CONSTRAINT ck_category_sla_hours     CHECK (sla_hours BETWEEN 1 AND 720),
     CONSTRAINT fk_category_department    FOREIGN KEY (department_id) REFERENCES department (department_id)
         ON UPDATE CASCADE ON DELETE RESTRICT
@@ -126,19 +148,28 @@ CREATE TABLE complaint (
     sla_deadline      TIMESTAMPTZ   NOT NULL,
     resolved_at       TIMESTAMPTZ,                         -- Resolution_Time is derived from this
     vector_synced_at  TIMESTAMPTZ,                         -- NULL = not yet in Qdrant
+    -- Full-text search column. GENERATED ... STORED means Postgres recomputes it itself whenever title or
+    -- description changes; nobody writes to it. The title is weighted A (most important) and the
+    -- description B, so a title match ranks higher. Indexed with GIN below.
     search_tsv        TSVECTOR GENERATED ALWAYS AS (
                           setweight(to_tsvector('english', coalesce(title, '')), 'A') ||
                           setweight(to_tsvector('english', coalesce(description, '')), 'B')
                       ) STORED,
+    -- The eight allowed states. Which moves between them are allowed is a separate rule: the status_transition
+    -- table below, enforced by a trigger.
     CONSTRAINT ck_complaint_status CHECK (status IN
         ('OPEN', 'ASSIGNED', 'IN_PROGRESS', 'ESCALATED', 'RESOLVED', 'CLOSED', 'REOPENED', 'DUPLICATE')),
     CONSTRAINT ck_complaint_priority      CHECK (priority IN ('LOW', 'NORMAL', 'HIGH', 'CRITICAL')),
     CONSTRAINT ck_complaint_title         CHECK (char_length(btrim(title)) >= 5),
+    -- Business rules as CHECKs: the deadline is after creation; a resolution is not before creation;
+    -- RESOLVED or CLOSED needs a resolved_at; DUPLICATE needs the original in duplicate_of;
+    -- a complaint cannot be its own duplicate; location is both coordinates or neither; the count is not negative.
     CONSTRAINT ck_complaint_sla           CHECK (sla_deadline > created_at),
     CONSTRAINT ck_complaint_resolution    CHECK (resolved_at IS NULL OR resolved_at >= created_at),
     CONSTRAINT ck_complaint_resolved_set  CHECK (status NOT IN ('RESOLVED', 'CLOSED') OR resolved_at IS NOT NULL),
     CONSTRAINT ck_complaint_duplicate     CHECK (status <> 'DUPLICATE' OR duplicate_of IS NOT NULL),
     CONSTRAINT ck_complaint_not_own_dup   CHECK (duplicate_of IS NULL OR duplicate_of <> complaint_id),
+    -- (latitude IS NULL) = (longitude IS NULL) is true when both are NULL or both are set, so half a location is refused.
     CONSTRAINT ck_complaint_location_pair CHECK ((latitude IS NULL) = (longitude IS NULL)),
     CONSTRAINT ck_complaint_latitude      CHECK (latitude  IS NULL OR latitude  BETWEEN -90  AND 90),
     CONSTRAINT ck_complaint_longitude     CHECK (longitude IS NULL OR longitude BETWEEN -180 AND 180),
@@ -151,8 +182,11 @@ CREATE TABLE complaint (
         ON UPDATE CASCADE ON DELETE RESTRICT,
     CONSTRAINT fk_complaint_filed_by    FOREIGN KEY (filed_by)      REFERENCES app_user (user_id)
         ON UPDATE CASCADE ON DELETE RESTRICT,
+    -- SET NULL: if a staff member is deleted their complaints stay, unassigned. filed_by is RESTRICT instead,
+    -- because a complaint must always have its author.
     CONSTRAINT fk_complaint_assigned_to FOREIGN KEY (assigned_to)   REFERENCES app_user (user_id)
         ON UPDATE CASCADE ON DELETE SET NULL,
+    -- Self-reference (recursive 1:N): the original complaint this one duplicates.
     CONSTRAINT fk_complaint_duplicate   FOREIGN KEY (duplicate_of)  REFERENCES complaint (complaint_id)
         ON UPDATE CASCADE ON DELETE SET NULL
 );
@@ -162,6 +196,7 @@ CREATE TABLE status_transition (
     from_status  VARCHAR(15) NOT NULL,
     to_status    VARCHAR(15) NOT NULL,
     actor_role   VARCHAR(10) NOT NULL,
+    -- The whole row is the key: the same move may be allowed to several roles, one row per role.
     CONSTRAINT pk_status_transition    PRIMARY KEY (from_status, to_status, actor_role),
     CONSTRAINT ck_transition_distinct  CHECK (from_status <> to_status),
     CONSTRAINT ck_transition_role      CHECK (actor_role IN ('CITIZEN', 'STAFF', 'ADMIN', 'SYSTEM')),
@@ -182,6 +217,8 @@ CREATE TABLE status_history (
     changed_by    INTEGER,                        -- NULL = automated (trigger / pg_cron)
     remarks       TEXT,
     changed_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    -- Weak entity: identified by its owner plus a partial key, so the key is (complaint_id, history_no).
+    -- ON DELETE CASCADE: the history disappears with its complaint.
     CONSTRAINT pk_status_history          PRIMARY KEY (complaint_id, history_no),
     CONSTRAINT ck_history_no              CHECK (history_no >= 1),
     CONSTRAINT ck_history_new_status      CHECK (new_status IN
@@ -210,6 +247,8 @@ CREATE TABLE escalation (
     reason            VARCHAR(500) NOT NULL,
     escalated_at      TIMESTAMPTZ  NOT NULL DEFAULT now(),
     resolved_at       TIMESTAMPTZ,
+    -- Weak entity again: (complaint_id, escalation_level), so a complaint has at most one row per level.
+    -- This is also what makes the SLA sweep safe to run twice (ON CONFLICT DO NOTHING).
     CONSTRAINT pk_escalation             PRIMARY KEY (complaint_id, escalation_level),
     CONSTRAINT ck_escalation_resolved    CHECK (resolved_at IS NULL OR resolved_at >= escalated_at),
     CONSTRAINT fk_escalation_complaint   FOREIGN KEY (complaint_id)     REFERENCES complaint (complaint_id)
@@ -229,6 +268,7 @@ CREATE TABLE upvote (
     complaint_id  INTEGER     NOT NULL,
     user_id       INTEGER     NOT NULL,
     upvoted_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    -- Composite key (complaint_id, user_id): one upvote per person per complaint. This is the M:N link table.
     CONSTRAINT pk_upvote            PRIMARY KEY (complaint_id, user_id),
     CONSTRAINT fk_upvote_complaint  FOREIGN KEY (complaint_id) REFERENCES complaint (complaint_id)
         ON UPDATE CASCADE ON DELETE CASCADE,
@@ -249,6 +289,7 @@ CREATE TABLE duplicate_match (
     CONSTRAINT ck_match_distinct       CHECK (complaint_id <> matched_complaint_id),
     CONSTRAINT ck_match_score          CHECK (similarity_score BETWEEN 0 AND 1),
     CONSTRAINT ck_match_review_status  CHECK (review_status IN ('PENDING', 'CONFIRMED', 'REJECTED')),
+    -- (review_status = 'PENDING') = (reviewed_at IS NULL): a match is pending exactly when it has no review time.
     CONSTRAINT ck_match_reviewed       CHECK ((review_status = 'PENDING') = (reviewed_at IS NULL)),
     CONSTRAINT fk_match_complaint      FOREIGN KEY (complaint_id)         REFERENCES complaint (complaint_id)
         ON UPDATE CASCADE ON DELETE CASCADE,
@@ -280,6 +321,7 @@ CREATE TABLE user_session (
     created_at  TIMESTAMPTZ  NOT NULL DEFAULT now(),
     expires_at  TIMESTAMPTZ  NOT NULL,
     user_agent  VARCHAR(255),
+    -- The stored value must be a SHA-256 hash: 64 lowercase hex characters.
     CONSTRAINT ck_session_hash    CHECK (token_hash ~ '^[0-9a-f]{64}$'),
     CONSTRAINT ck_session_expiry  CHECK (expires_at > created_at),
     CONSTRAINT fk_session_user    FOREIGN KEY (user_id) REFERENCES app_user (user_id)
@@ -289,6 +331,8 @@ CREATE TABLE user_session (
 -- ---------------------------------------------------------------------
 -- Indexes (FK columns, dashboard filters, the SLA sweep, full-text)
 -- ---------------------------------------------------------------------
+-- Postgres does not index foreign-key columns by itself. These indexes speed up joins on them and the
+-- checks made when a referenced row is deleted or updated.
 CREATE INDEX idx_app_user_department         ON app_user (department_id);
 CREATE INDEX idx_app_user_ward               ON app_user (ward_id);
 CREATE INDEX idx_app_user_supervisor         ON app_user (supervisor_id);
@@ -296,21 +340,29 @@ CREATE INDEX idx_category_department         ON complaint_category (department_i
 CREATE INDEX idx_complaint_filed_by          ON complaint (filed_by);
 CREATE INDEX idx_complaint_assigned_to       ON complaint (assigned_to);
 CREATE INDEX idx_complaint_department        ON complaint (department_id);
+-- Composite index: ward first, then status. Serves "open complaints in ward X" (queues, dashboards).
 CREATE INDEX idx_complaint_ward_status       ON complaint (ward_id, status);
+CREATE INDEX idx_complaint_created_at       ON complaint (created_at DESC);                   -- dashboards and date-range queries
 CREATE INDEX idx_complaint_duplicate_of      ON complaint (duplicate_of);
 CREATE INDEX idx_complaint_category_ward_created ON complaint (category_id, ward_id, created_at DESC);  -- from Lab 4
+-- Partial index: only open complaints are indexed (the WHERE clause), so it stays small and is exactly
+-- what the SLA sweep scans.
 CREATE INDEX idx_complaint_sla_open          ON complaint (sla_deadline)
     WHERE status IN ('OPEN', 'ASSIGNED', 'IN_PROGRESS', 'REOPENED', 'ESCALATED');                      -- SLA sweep
 CREATE INDEX idx_complaint_unsynced          ON complaint (complaint_id) WHERE vector_synced_at IS NULL;
+-- GIN index on the tsvector column: makes full-text search (@@) fast.
 CREATE INDEX idx_complaint_search            ON complaint USING GIN (search_tsv);
 CREATE INDEX idx_history_changed_by          ON status_history (changed_by);
 CREATE INDEX idx_escalation_escalated_to     ON escalation (escalated_to);
 CREATE INDEX idx_upvote_user                 ON upvote (user_id);
 CREATE INDEX idx_match_matched               ON duplicate_match (matched_complaint_id);
+-- Partial index for the staff "duplicates to review" list.
 CREATE INDEX idx_match_pending               ON duplicate_match (detected_at) WHERE review_status = 'PENDING';
+-- Partial index for the unread badge count.
 CREATE INDEX idx_notification_user_unread    ON notification (user_id, sent_at DESC) WHERE NOT read_status;
 CREATE INDEX idx_notification_user           ON notification (user_id, sent_at DESC);
 CREATE INDEX idx_session_user                ON user_session (user_id);
 CREATE INDEX idx_session_expires             ON user_session (expires_at);
 
+-- Record that this migration has run.
 INSERT INTO schema_migrations (version) VALUES ('001_schema');

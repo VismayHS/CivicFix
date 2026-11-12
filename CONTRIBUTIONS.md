@@ -15,7 +15,7 @@ Every claim below can be checked in the commit history (`git log --author=…`) 
 
 | Object | File | Author | Notes |
 |---|---|---|---|
-| Schema v2: 15 tables, keys, CHECK constraints, 22 indexes | `db/migrations/001_schema.sql` | Vismay | Lab 4 schema reconciled with the EL3 schema PDF ([schema-v2.md](docs/database/schema-v2.md)) |
+| Schema v2: 15 tables, keys, CHECK constraints, 23 indexes | `db/migrations/001_schema.sql` | Vismay | Lab 4 schema reconciled with the EL3 schema PDF ([schema-v2.md](docs/database/schema-v2.md)) |
 | Reference data (wards, departments, categories, transitions, policy) | `002_reference_data.sql` | Vismay, Ashvin | |
 | 14 functions: auth, sessions, routing (`fn_pick_assignee`), escalation target, SLA compliance, access checks, upvote toggle | `003_functions.sql` | Ashvin | Reviewed and fixed in PR #2 |
 | 3 procedures: `sp_change_status`, `sp_confirm_duplicate`, `sp_escalate_overdue` | `004_procedures.sql` | Ashvin | Reviewed and fixed in PR #2 |
@@ -36,7 +36,7 @@ Every claim below can be checked in the commit history (`git log --author=…`) 
 | `rls_transitions.sql` | Visibility per role; illegal transitions rejected by the trigger | Ashvin (seed fix by Vismay) |
 | `rbac.sql` | 56 GRANT and RLS assertions, role by role | Vismay |
 | `auto_close.sql` | 14 checks on `sp_auto_close_resolved` | Vismay |
-| `escalation.sql` | 15 checks on `sp_escalate_overdue`, level by level | Vismay |
+| `escalation.sql` | 16 checks on `sp_escalate_overdue`, level by level | Vismay |
 
 ### Vector database (Qdrant)
 

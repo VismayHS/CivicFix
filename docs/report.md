@@ -24,7 +24,7 @@ Stack: PostgreSQL 17 (with `pg_cron`) as the system of record, Qdrant as the vec
 
 ### 1.2 Relational schema and the ER-to-relational mapping
 
-[`docs/diagrams/relational-schema-v2.png`](diagrams/relational-schema-v2.png) is drawn from the live database catalog, so it cannot drift from the real tables. It has 15 tables.
+[`docs/diagrams/relational-schema-v2.png`](diagrams/relational-schema-v2.png) is drawn from the live database catalog, so it cannot drift from the real tables. It draws the 14 tables of the model. The 15th table in the database, `schema_migrations`, only records which migrations have run, so it is left out.
 
 | ER construct | Mapping rule | Result in our schema |
 |---|---|---|
@@ -52,7 +52,7 @@ More detail, and what changed from the Lab 4 schema: [schema-v2.md](database/sch
 
 ### 2.1 SQL DDL with constraints
 
-[`db/migrations/001_schema.sql`](../db/migrations/001_schema.sql) creates 15 tables, all with named constraints, plus 22 indexes.
+[`db/migrations/001_schema.sql`](../db/migrations/001_schema.sql) creates 15 tables, all with named constraints, plus 23 indexes.
 
 | Kind | Examples |
 |---|---|
@@ -139,7 +139,7 @@ Two designs worth pointing out:
 - **The state machine is data.** The table `status_transition (from, to, actor_role)` lists every allowed move. A trigger rejects anything else with SQLSTATE `23514`, whichever application or person tries it.
 - **The escalation sweep is safe to run twice.** `sp_escalate_overdue` inserts every escalation level that is due (department head at the breach, ward administrator after 24 hours, commissioner after 48 hours), uses `FOR UPDATE SKIP LOCKED` and `ON CONFLICT DO NOTHING`, and so a second run adds nothing.
 
-Proof: five SQL test files, each one transaction that ends in `ROLLBACK` (`smoke`, `rbac` with 56 checks, `rls_transitions`, `auto_close` with 14 checks, `escalation` with 15 checks).
+Proof: five SQL test files, each one transaction that ends in `ROLLBACK` (`smoke`, `rbac` with 56 checks, `rls_transitions`, `auto_close` with 14 checks, `escalation` with 16 checks).
 
 ### 4.2 Vector database: Read, Update, Delete
 
@@ -155,7 +155,7 @@ The threshold 0.70 was chosen by calibration on labelled duplicate pairs from th
 ## 5. Web application and database integration (rubric item 5)
 
 - **Next.js interface:** 21 pages for three roles. Citizens report, search and track. Staff work a queue and review duplicates. Administrators see analytics, escalations, users, DB Lab and the Vector console. Browser tests check there is no sideways scrolling on phone-sized screens and no errors in the console. [Screenshots](screenshots/).
-- **Backend and API:** a single contract (`lib/data/contract.ts`) with two implementations, a mock and the Postgres one. 12 REST routes under `/api/v1/` use the same contract. `npm run test:smoke` signs in as each role and exercises every page and the main workflows over HTTP.
+- **Backend and API:** a single contract (`lib/data/contract.ts`) with two implementations, a mock and the Postgres one. 13 REST routes under `/api/v1/` use the same contract. `npm run test:smoke` signs in as each role and exercises every page and the main workflows over HTTP.
 
 ## 6. Authentication and authorization (rubric item 6)
 

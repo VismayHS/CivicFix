@@ -34,7 +34,7 @@ Every seed account uses the password `civicfix123`. The login page also has one-
   - Weak entities: STATUS_HISTORY and ESCALATION, each linked to COMPLAINT by an identifying relationship.
   - Multivalued `Phone_Number`, composite `Location`, derived `Resolution_Time`.
   - Recursive relationships: *Supervises* on USER; *Duplicate_Of* and *Matches* on COMPLAINT.
-- **Relational schema:** 15 tables, drawn from the live catalog. Show the mapping:
+- **Relational schema:** 14 tables, drawn from the live catalog (the database holds a 15th, `schema_migrations`, which only tracks which migrations ran). Show the mapping:
   - Multivalued attribute → `user_phone`
   - M:N → `upvote`
   - Weak entity → composite primary key
@@ -70,7 +70,7 @@ docker exec civicfix-db psql -U postgres -d civicfix -f /civicfix/queries/dml-de
    - Description: `A deep pothole has opened in the middle of the road near Sony World junction. Bikes swerve into traffic to avoid it, and it fills with rain water.`
 2. Before you submit, the wizard shows **"Deep pothole near Sony World junction" (CF-00037), about 89% similar**. That's a Qdrant read: the text was embedded with MiniLM and searched among open complaints in the same ward.
 3. Click **Upvote** on that suggestion instead of filing. This shows `fn_toggle_upvote`, and the upvote-count trigger updates the number.
-4. Now file a different issue, e.g. a broken streetlight. Open it:
+4. Now file a second, different issue in the **Roads** department, so that it lands in Ravi's queue for the next step: category **Broken footpath**, ward Koramangala, title `Paving stones broken outside the post office`, any description of 20 or more characters. If the wizard suggests a match, ignore it and submit. (A streetlight would go to Usha Rani, a different department.) Open it:
    - It is already **ASSIGNED** to a named staff member: the insert trigger plus `fn_pick_assignee`.
    - It has an SLA deadline: computed from the category by `trg_complaint_prepare`.
    - Its history shows "Auto-assigned to …" by CivicFix, not by the citizen.

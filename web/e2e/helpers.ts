@@ -1,5 +1,6 @@
 import { expect, test as base, type APIRequestContext, type Page } from "@playwright/test";
 
+// Shared test setup. The password and the four accounts come from the seed data (db/seed).
 export const PASSWORD = "civicfix123";
 export const ACCOUNTS = {
   citizen: "ananya@civicfix.test",
@@ -23,6 +24,7 @@ export const test = base.extend<{ consoleErrors: string[] }>({
     expect(errors, "browser console errors").toEqual([]);
   },
 });
+// Re-export so the specs import everything from one place.
 export { expect };
 
 /** Signs in through the real login form. */
@@ -43,6 +45,7 @@ export async function fileViaApi(request: APIRequestContext, body: { title: stri
   return (await res.json()).data.complaintId as number;
 }
 
+// The public complaint number shown in the UI, for example CF-00042.
 export const ref = (id: number) => `CF-${String(id).padStart(5, "0")}`;
 /** Unique text so a test's complaint never matches an earlier run's. */
 export const stamp = () => new Date().toISOString().slice(11, 19).replace(/:/g, "");

@@ -2,8 +2,10 @@ import { format, formatDistanceStrict } from "date-fns";
 import { DONE_STATES } from "./constants";
 import type { ComplaintStatus } from "./types";
 
+// Milliseconds in an hour.
 const HOUR = 3_600_000;
 
+// The public complaint number: id 42 becomes "CF-00042".
 export function complaintRef(id: number) {
   return `CF-${String(id).padStart(5, "0")}`;
 }
@@ -16,6 +18,7 @@ export function parseComplaintRef(input: string): number | null {
   return id > 0 ? id : null;
 }
 
+// Date helpers (date-fns), used across the UI so every date looks the same.
 export function formatDate(iso: string) {
   return format(new Date(iso), "d MMM yyyy");
 }

@@ -1,6 +1,9 @@
 import { ACCOUNTS, expect, fileViaApi, signIn, stamp, test } from "./helpers";
 
+// Admin journeys. The tests run in order against one seeded database and share its data.
 test.describe("admin journey", () => {
+  // A citizen files through the REST API (setup), then the commissioner reassigns it in the UI.
+  // The history row "Reassigned by municipal admin" proves the write went through and was readable under RLS.
   test("commissioner reassigns a complaint", async ({ page, request, consoleErrors: _ }) => {
     const id = await fileViaApi(request, {
       title: `Broken kerb test ${stamp()} near Forum Mall`,
@@ -18,6 +21,7 @@ test.describe("admin journey", () => {
     await expect(page.getByText("Reassigned by municipal admin").first()).toBeVisible(); // history row, allowed by RLS
   });
 
+  // The admin tools on real data: run the SLA sweep and the auto-close, then DB Lab and the Vector console.
   test("SLA sweep, auto-close, DB Lab and Vector console work on real data", async ({ page, consoleErrors: _ }) => {
     await signIn(page, ACCOUNTS.admin);
 
